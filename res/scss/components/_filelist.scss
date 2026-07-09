@@ -1,0 +1,109 @@
+/* `.dms-filelist` — the middle pane: documents of the selected folder as a row list, each
+   with a thumbnail (images) or a kind-coloured file-type icon (everything else). A row is
+   selectable; the active row drives the right-hand preview. */
+.dms-filelist {
+    display:        flex;
+    flex-direction: column;
+}
+
+.dms-filelist__empty {
+    padding:    var(--dms-space-8) var(--dms-space-6);
+    text-align: center;
+    color:      var(--dms-muted);
+    font-size:  var(--dms-font-size-sm);
+}
+
+/* ── One document row ── */
+.dms-file {
+    display:       flex;
+    align-items:   center;
+    gap:           var(--dms-space-3);
+    padding:       var(--dms-space-2) var(--dms-space-4);
+    border-bottom: 1px solid var(--dms-line);
+    cursor:        pointer;
+    transition:    background var(--dms-transition-fast);
+}
+.dms-file:hover { background: var(--dms-surface); }
+.dms-file--active { background: var(--dms-accent-soft); }
+.dms-file--active:hover { background: var(--dms-accent-soft); }
+.dms-file:focus-visible { outline: 2px solid var(--dms-focus-ring); outline-offset: -2px; }
+
+
+/* Thumbnail / icon tile (square). */
+.dms-file__thumb {
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    width:           2.5rem;
+    height:          2.5rem;
+    flex-shrink:     0;
+    border-radius:   var(--dms-radius-md);
+    overflow:        hidden;
+    background:      var(--dms-surface-alt);
+    color:           var(--dms-muted);
+}
+.dms-file__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.dms-file__thumb .dms-icon { width: 1.25rem; height: 1.25rem; }
+
+/* Kind tints for the icon tile (non-image files). */
+.dms-file__thumb--image    { background: #eef2fb; color: var(--dms-accent); }
+.dms-file__thumb--document { background: #fdecec; color: var(--dms-danger); }
+.dms-file__thumb--text     { background: #eef0f3; color: var(--dms-text-soft); }
+.dms-file__thumb--archive  { background: #fdf4e3; color: var(--dms-warning); }
+.dms-file__thumb--audio,
+.dms-file__thumb--video    { background: #e8f3ec; color: var(--dms-success); }
+
+/* Name + meta column — the navigable link (only the name/meta selects the document);
+   the `⋮` menu sits before it, the thumbnail before that. */
+.dms-file__main {
+    display:         block;
+    flex:            1;
+    min-width:       0;
+    color:           inherit;
+    text-decoration: none;
+}
+.dms-file__main:hover { color: inherit; }
+.dms-file__name {
+    overflow:      hidden;
+    text-overflow: ellipsis;
+    white-space:   nowrap;
+    font-size:     var(--dms-font-size-sm);
+    font-weight:   var(--dms-font-weight-medium);
+    color:         var(--dms-text);
+}
+.dms-file__meta {
+    display:    flex;
+    gap:        var(--dms-space-2);
+    font-size:  var(--dms-font-size-xs);
+    color:      var(--dms-muted);
+}
+.dms-file__meta-sep { color: var(--dms-line-strong); }
+
+/* Delivery-mode badge (sealed | protected | public). */
+.dms-file__badge {
+    flex-shrink:    0;
+    padding:        0 var(--dms-space-2);
+    border-radius:  var(--dms-radius-pill);
+    font-size:      var(--dms-font-size-xs);
+    font-weight:    var(--dms-font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height:    1.6;
+}
+.dms-file__badge--public    { background: var(--dms-success-bg); color: var(--dms-success); }
+.dms-file__badge--protected { background: var(--dms-info-bg);    color: var(--dms-info); }
+.dms-file__badge--sealed    { background: var(--dms-surface-alt); color: var(--dms-text-soft); }
+
+/* Row actions — revealed on hover / when the row is active. */
+.dms-file__actions {
+    display:     flex;
+    gap:         var(--dms-space-1);
+    flex-shrink: 0;
+    opacity:     0;
+    transition:  opacity var(--dms-transition-fast);
+}
+.dms-file:hover .dms-file__actions,
+.dms-file--active .dms-file__actions { opacity: 1; }
+
+/* Soft-deleted / inactive document. */
+.dms-file--inactive .dms-file__name { opacity: 0.5; text-decoration: line-through; }

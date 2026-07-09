@@ -1,0 +1,79 @@
+/* DMS tokens — neutral, tool-like default. The `.dms` fragment is embedded inside a host
+   viewArea (frontend/backend/member); its tokens live on the `.dms` wrapper, never `:root`
+   (ADR-018). Names are `--dms-*` prefixed so it is unambiguous which wrapper a value
+   resolves to when dms component CSS sits inside a host's DOM. A host overrides any value
+   by redeclaring it on `.dms` in CSS loaded after the dms bundle (e.g. `.dms { --dms-accent: … }`).
+   This set MUST stay complete — a token a dms component reads but `.dms` omits would inherit
+   the host's value (inconsistent rendering across hosts). */
+.dms {
+    /* Surface — werkbank light (technical indigo). The dms keeps its OWN copy of the
+       backend palette (ADR-018: complete, overridable per host); values MIRROR the
+       backend Werkbank palette but stay separate `--dms-*` tokens. */
+    --dms-bg:           #ffffff;   /* drive base (elevated white) */
+    --dms-surface:      #f3f4fb;   /* striped rows, panel backgrounds (be-bg) */
+    --dms-surface-alt:  #e9e7fd;   /* hover surface, nested panel (be-accent-soft) */
+    --dms-elevated:     #ffffff;   /* cards, dialogs, dropdowns */
+
+    /* Text */
+    --dms-text:         #191c2b;   /* be-text */
+    --dms-text-soft:    #3a3f57;   /* secondary body text */
+    --dms-muted:        #5f6480;   /* be-muted */
+    --dms-text-inverse: #ffffff;   /* text on an accent/dark fill */
+
+    /* Lines */
+    --dms-line:         #dedfef;   /* be-line */
+    --dms-line-strong:  #c7c9e2;   /* heavier separators, table head rule */
+
+    /* Accent — werkbank indigo */
+    --dms-accent:       #4f46e5;
+    --dms-accent-dark:  #3f38c9;   /* hover/active accent */
+    --dms-accent-light: #7a72f0;
+    --dms-accent-soft:  #e9e7fd;   /* selected row, soft accent fill */
+    --dms-on-accent:    #ffffff;   /* indicator on top of an accent fill */
+    --dms-focus-ring:   rgba(79, 70, 229, 0.35);  /* focus outline (px-less, host-independent) */
+
+    /* Semantic */
+    --dms-success:      #1f9d57;
+    --dms-success-bg:   #e5f5ec;
+    --dms-danger:       #dc2626;
+    --dms-danger-bg:    #fdecec;
+    --dms-warning:      #c0851c;
+    --dms-warning-bg:   #f8efdb;
+    --dms-info:         #0077b6;
+    --dms-info-bg:      #e0f0fb;
+}
+
+/* Werkbank dark — mirrors the backend dark theme. The dms is currently embedded ONLY in
+   the backend host, so its dark set keys off the host's `[data-be-theme="dark"]` on
+   `<html class="be">`. This stays a SEPARATE `--dms-*` set (own copy, overridable); a
+   different host would override `.dms` per ADR-018 instead of relying on this selector. */
+[data-be-theme="dark"] .dms {
+    --dms-bg:           #14161f;
+    --dms-surface:      #1c1f2c;
+    --dms-surface-alt:  #262a3c;
+    --dms-elevated:     #24273a;
+
+    --dms-text:         #e7e8f5;
+    --dms-text-soft:    #b8bcd0;
+    --dms-muted:        #8a8ea8;
+    --dms-text-inverse: #ffffff;
+
+    --dms-line:         #282b3e;
+    --dms-line-strong:  #3a3e52;
+
+    --dms-accent:       #9698f5;
+    --dms-accent-dark:  #7f80ee;
+    --dms-accent-light: #b4b5f9;
+    --dms-accent-soft:  #24243f;
+    --dms-on-accent:    #ffffff;
+    --dms-focus-ring:   rgba(150, 152, 245, 0.40);
+
+    --dms-success:      #4ec98a;
+    --dms-success-bg:   #142a1e;
+    --dms-danger:       #f06b6b;
+    --dms-danger-bg:    #2c1616;
+    --dms-warning:      #dbaa4e;
+    --dms-warning-bg:   #2a2011;
+    --dms-info:         #4aa3d4;
+    --dms-info-bg:      #0f2530;
+}

@@ -1,0 +1,67 @@
+/* `.dms-tree` — the left pane folder hierarchy. Each node is a row; depth is expressed by
+   left padding via `--dms-depth` (set inline per node). The selected folder drives the
+   middle list. */
+.dms-tree { font-size: var(--dms-font-size-sm); }
+
+.dms-tree__node { }
+
+.dms-tree__row {
+    display:       flex;
+    align-items:   center;
+    gap:           var(--dms-space-2);
+    padding:       var(--dms-space-1) var(--dms-space-2);
+    padding-left:  calc(var(--dms-space-2) + var(--dms-depth, 0) * var(--dms-space-4));
+    border-radius: var(--dms-radius-sm);
+    color:         var(--dms-text);
+    cursor:        pointer;
+    transition:    background var(--dms-transition-fast), color var(--dms-transition-fast);
+}
+.dms-tree__row:hover { background: var(--dms-surface-alt); }
+.dms-tree__row:focus-visible { outline: 2px solid var(--dms-focus-ring); outline-offset: -2px; }
+
+
+.dms-tree__node--active > .dms-tree__row {
+    background:  var(--dms-accent-soft);
+    color:       var(--dms-accent-dark);
+    font-weight: var(--dms-font-weight-medium);
+}
+
+/* Expand/collapse caret — rotates when the node is open. */
+.dms-tree__toggle {
+    display:     flex;
+    align-items: center;
+    width:       1rem;
+    color:       var(--dms-muted);
+    transition:  transform var(--dms-transition-fast);
+}
+.dms-tree__node--has-children.is-open > .dms-tree__row .dms-tree__toggle { transform: rotate(90deg); }
+.dms-tree__node:not(.dms-tree__node--has-children) > .dms-tree__row .dms-tree__toggle { visibility: hidden; }
+
+.dms-tree__icon { color: var(--dms-muted); }
+.dms-tree__node--active > .dms-tree__row .dms-tree__icon { color: var(--dms-accent); }
+
+/* Name is the navigable link (only the name selects the folder); the `⋮` menu sits
+   before it, the folder icon before that. */
+.dms-tree__name {
+    display:         block;
+    flex:            1;
+    min-width:       0;
+    overflow:        hidden;
+    text-overflow:   ellipsis;
+    white-space:     nowrap;
+    color:           inherit;
+    text-decoration: none;
+}
+.dms-tree__name:hover { color: inherit; }
+.dms-tree__count {
+    font-size:   var(--dms-font-size-xs);
+    color:       var(--dms-muted);
+    font-family: var(--dms-font-family-mono);
+}
+
+/* Children container — hidden until the node is open. */
+.dms-tree__children { display: none; }
+.dms-tree__node--has-children.is-open > .dms-tree__children { display: block; }
+
+/* Inactive folder (deliveryMode/active = off) — dimmed + struck. */
+.dms-tree__node--inactive > .dms-tree__row .dms-tree__name { opacity: 0.5; text-decoration: line-through; }

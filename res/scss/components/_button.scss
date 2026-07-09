@@ -1,0 +1,30 @@
+/* `.dms-btn` — the fragment's labelled action button (prefixed so it never collides with a
+   host `.btn`). Variants: primary (accent), ghost (bordered), muted. */
+.dms-btn {
+    display:         inline-flex;
+    align-items:     center;
+    gap:             var(--dms-space-2);
+    padding:         var(--dms-space-2) var(--dms-space-4);
+    border:          1px solid transparent;
+    border-radius:   var(--dms-radius-md);
+    font-size:       var(--dms-font-size-sm);
+    font-weight:     var(--dms-font-weight-semibold);
+    line-height:     var(--dms-line-height-tight);
+    white-space:     nowrap;
+    cursor:          pointer;
+    transition:      background var(--dms-transition-fast),
+                     color var(--dms-transition-fast),
+                     border-color var(--dms-transition-fast);
+}
+.dms-btn:focus-visible { outline: 2px solid var(--dms-focus-ring); outline-offset: 1px; }
+
+.dms-btn--primary { background: var(--dms-accent); color: var(--dms-on-accent); }
+.dms-btn--primary:hover { background: var(--dms-accent-dark); }
+
+.dms-btn--ghost { background: transparent; color: var(--dms-text); border-color: var(--dms-line-strong); }
+.dms-btn--ghost:hover { background: var(--dms-surface-alt); }
+
+.dms-btn--muted { background: var(--dms-surface-alt); color: var(--dms-text-soft); }
+.dms-btn--muted:hover { background: var(--dms-line); }
+
+.dms-btn[disabled] { opacity: 0.5; cursor: not-allowed; pointer-events: none; }

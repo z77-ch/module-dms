@@ -1,0 +1,35 @@
+/* `.dms-icon` — inline SVG icon sized to the current font; `currentColor` so it inherits
+   the surrounding text colour. `.dms-iconbtn` — a square, borderless icon action button. */
+.dms-icon {
+    display:       inline-block;
+    width:         1em;
+    height:        1em;
+    flex-shrink:   0;
+    fill:          none;
+    stroke:        currentColor;
+    stroke-width:  2;
+    stroke-linecap:  round;
+    stroke-linejoin: round;
+    vertical-align: -0.125em;
+}
+
+.dms-iconbtn {
+    display:         inline-flex;
+    align-items:     center;
+    justify-content: center;
+    width:           1.75rem;
+    height:          1.75rem;
+    padding:         0;
+    border:          none;
+    border-radius:   var(--dms-radius-sm);
+    background:      transparent;
+    color:           var(--dms-muted);
+    cursor:          pointer;
+    transition:      background var(--dms-transition-fast), color var(--dms-transition-fast);
+}
+.dms-iconbtn:hover { background: var(--dms-surface-alt); color: var(--dms-text); }
+.dms-iconbtn--danger:hover { background: var(--dms-danger-bg); color: var(--dms-danger); }
+.dms-iconbtn:focus-visible {
+    outline: 2px solid var(--dms-focus-ring);
+    outline-offset: 1px;
+}

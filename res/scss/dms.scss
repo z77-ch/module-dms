@@ -1,0 +1,16 @@
+/* DMS bundle — the single always-loaded sheet for the embedded `.dms` fragment.
+   Unlike frontend/backend (full-page viewAreas split into base + mobile/tablet/desktop),
+   the dms fragment ships ONE bundle: the host owns page-level layout and breakpoints; the
+   fragment styles itself within its container (internal @media in components where needed). */
+@use 'tokens/colors';
+@use 'tokens/typography';
+@use 'tokens/spacing';
+@use 'tokens/effects';
+@use 'base/base';
+@use 'components/icon';
+@use 'components/button';
+@use 'components/drive';
+@use 'components/tree';
+@use 'components/filelist';
+@use 'components/preview';
+@use 'components/upload';

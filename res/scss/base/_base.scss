@@ -1,0 +1,50 @@
+/* DMS fragment base — scoped to `.dms` so it NEVER resets the host page (an embedded
+   fragment must not touch the host's body/elements). Everything here is under `.dms` and
+   reads `--dms-*` tokens. */
+.dms {
+    box-sizing: border-box;
+    font-family: var(--dms-font-family-base);
+    font-size:   var(--dms-font-size-md);
+    line-height: var(--dms-line-height-base);
+    color:       var(--dms-text);
+}
+.dms *,
+.dms *::before,
+.dms *::after { box-sizing: inherit; }
+
+/* Tame the few raw elements the fragment uses, scoped under `.dms`. */
+.dms p,
+.dms h1,
+.dms h2,
+.dms h3,
+.dms ul,
+.dms ol  { margin: 0; }
+.dms ul,
+.dms ol  { list-style: none; padding: 0; }
+.dms img { display: block; max-width: 100%; }
+.dms a   { color: var(--dms-accent); text-decoration: none; }
+.dms a:hover { color: var(--dms-accent-dark); }
+.dms code {
+    font-family: var(--dms-font-family-mono);
+    font-size:   var(--dms-font-size-xs);
+}
+.dms button { font: inherit; color: inherit; }
+
+/* Per-row `⋮` action-menu trigger (tree folders + list documents). Opens the action
+   hub modal; kept small + muted so it does not compete with the row's name. */
+.dms-rowmenu {
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    flex-shrink:     0;
+    width:           1.15rem;
+    align-self:      stretch;
+    border:          none;
+    background:      none;
+    color:           var(--dms-muted);
+    cursor:          pointer;
+    border-radius:   var(--dms-radius-sm);
+    font-size:       1.05rem;
+    line-height:     1;
+}
+.dms-rowmenu:hover { color: var(--dms-accent); background: var(--dms-surface-alt); }

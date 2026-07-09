@@ -1,0 +1,29 @@
+/* DMS effect tokens on the `.dms` wrapper (ADR-018), `--dms-*` prefixed: radius, shadow,
+   transition, z-index. Values mirror the framework standard. The z-index lanes stay in a low
+   band (≤ 400) so an embedded dms dropdown/dialog layers correctly WITHIN its host but never
+   covers the host's global flash (1100) / popup-messages (1000) layers. */
+.dms {
+    /* Border radius */
+    --dms-radius-sm:   4px;
+    --dms-radius-md:   8px;
+    --dms-radius-lg:   12px;
+    --dms-radius-pill: 9999px;
+
+    /* Shadows */
+    --dms-shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.10);
+    --dms-shadow-md:   0 4px 12px rgba(0, 0, 0, 0.12);
+    --dms-shadow-lg:   0 8px 24px rgba(0, 0, 0, 0.15);
+    --dms-shadow-xl:   0 16px 48px rgba(0, 0, 0, 0.18);
+
+    /* Transitions */
+    --dms-transition-fast: 150ms ease;
+    --dms-transition-base: 250ms ease;
+    --dms-transition-slow: 400ms ease;
+
+    /* Z-index lanes (fragment-internal; kept below host global flash/messages) */
+    --dms-z-base:     1;
+    --dms-z-dropdown: 100;
+    --dms-z-sticky:   200;
+    --dms-z-overlay:  300;
+    --dms-z-modal:    400;
+}

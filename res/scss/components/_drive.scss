@@ -1,0 +1,63 @@
+/* `.dms-drive` — the three-pane Drive shell: left folder tree, middle document list,
+   right preview. A fragment embedded in a host page; it fills its host container and
+   manages its own internal scrolling per pane (the host owns the page scroll). */
+.dms-drive {
+    display:               grid;
+    grid-template-columns: minmax(180px, 16rem) minmax(0, 1fr) minmax(220px, 22rem);
+    grid-template-rows:    1fr;
+    grid-template-areas:   "tree list preview";
+    height:        100%;
+    min-height:    24rem;
+    background:    var(--dms-bg);
+    border:        1px solid var(--dms-line);
+    border-radius: var(--dms-radius-lg);
+    overflow:      hidden;
+    color:         var(--dms-text);
+}
+
+/* ── Breadcrumb (the folder PATH) ──────────────────────────────────────────────
+   The toolbar CONTAINER moved to the backend shell header band (hc2, module-backend
+   Documents/DriveController/list.hc2.tpl.php). The breadcrumb PANE keeps these classes so it
+   renders identically in that slot AND stays the in-place `replace-html` target of
+   DriveControllerTrait::panes across folder navigation. */
+.dms-drive__breadcrumb {
+    display:     flex;
+    align-items: center;
+    gap:         var(--dms-space-2);
+    flex:        1;
+    min-width:   0;
+    font-size:   var(--dms-font-size-sm);
+    color:       var(--dms-muted);
+}
+.dms-drive__crumb { white-space: nowrap; }
+.dms-drive__crumb--active { color: var(--dms-text); font-weight: var(--dms-font-weight-medium); }
+.dms-drive__crumb-sep { color: var(--dms-line-strong); }
+
+/* ── Panes ── */
+.dms-drive__tree {
+    grid-area:    tree;
+    overflow-y:   auto;
+    padding:      var(--dms-space-2);
+    border-right: 1px solid var(--dms-line);
+    background:   var(--dms-surface);
+}
+.dms-drive__list {
+    grid-area:  list;
+    overflow-y: auto;
+    background: var(--dms-bg);
+}
+.dms-drive__preview {
+    grid-area:    preview;
+    overflow-y:   auto;
+    border-left:  1px solid var(--dms-line);
+    background:   var(--dms-surface);
+}
+
+/* ── Narrow container: drop the preview pane (kept reachable via row click → modal in JS). ── */
+@media (max-width: 60rem) {
+    .dms-drive {
+        grid-template-columns: minmax(160px, 14rem) minmax(0, 1fr);
+        grid-template-areas:   "tree list";
+    }
+    .dms-drive__preview { display: none; }
+}

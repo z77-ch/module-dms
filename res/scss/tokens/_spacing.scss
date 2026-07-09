@@ -1,0 +1,15 @@
+/* DMS spacing tokens on the `.dms` wrapper (ADR-018), `--dms-*` prefixed. Powers-of-4 scale
+   (the number is the multiplier of 4px), mirroring the framework standard. Reference by
+   number; never hardcode a spacing value in a dms component. */
+.dms {
+    --dms-space-1:  0.25rem;   /*  4px */
+    --dms-space-2:  0.5rem;    /*  8px */
+    --dms-space-3:  0.75rem;   /* 12px */
+    --dms-space-4:  1rem;      /* 16px */
+    --dms-space-5:  1.25rem;   /* 20px */
+    --dms-space-6:  1.5rem;    /* 24px */
+    --dms-space-8:  2rem;      /* 32px */
+    --dms-space-10: 2.5rem;    /* 40px */
+    --dms-space-12: 3rem;      /* 48px */
+    --dms-space-16: 4rem;      /* 64px */
+}

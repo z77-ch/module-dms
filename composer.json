@@ -1,0 +1,30 @@
+{
+    "name": "z77/module-dms",
+    "description": "Z77 DMS Module | authorized document delivery (OutputController) + drive surface for the document management system.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Peter Ruepp",
+            "email": "peter.ruepp@z77.ch"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Z77\\Module\\Dms\\": "src/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "require": {
+        "php": ">=8.2",
+        "z77/core": "^1.0",
+        "z77/shared": "^1.0",
+        "z77/persistence": "^1.0"
+    },
+    "support": {
+        "issues": "https://github.com/z77-ch/module-dms/issues",
+        "source": "https://github.com/z77-ch/module-dms"
+    },
+    "readme": "README.md"
+}

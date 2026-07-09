@@ -1,0 +1,125 @@
+/* `.dms-upload-list` — the per-file queue inside the upload modal (upload-UX rebuild).
+   One row per selected file: name · progress track+fill · status · cancel (✕), with an
+   inline overwrite prompt on a name conflict. State modifiers colour the row/fill. Rendered
+   by `documents/upload.js`; lives in the dms bundle (the modal opens on the Drive page). */
+.dms-upload-list {
+    list-style: none;
+    margin:     var(--dms-space-4) 0 0;
+    padding:    0;
+    display:    flex;
+    flex-direction: column;
+    gap:        var(--dms-space-2);
+}
+
+/* One file row. name · status · cancel on one line; the conflict prompt spans the full width
+   on its own line below. The upload progress is a semi-transparent accent fill that grows
+   left→right ACROSS the whole row behind the content (modern row-fill, not a separate bar). */
+.dms-upload-row {
+    position:              relative;
+    overflow:              hidden;
+    display:               grid;
+    grid-template-columns: 1fr auto auto;
+    align-items:           center;
+    gap:                   var(--dms-space-1) var(--dms-space-3);
+    padding:               var(--dms-space-2) var(--dms-space-3);
+    border:                1px solid var(--dms-line);
+    border-radius:         var(--dms-radius-md);
+    background:            var(--dms-surface);
+}
+
+/* The full-row progress fill: absolute, width driven inline by upload.js, behind the text.
+   color-mix keeps it genuinely translucent (derived from the accent token — no hardcoded
+   colour), so the name stays readable as the fill sweeps under it. */
+.dms-upload-row__progress {
+    position:   absolute;
+    top:        0;
+    left:       0;
+    bottom:     0;
+    width:      0;
+    z-index:    0;
+    background: var(--dms-accent-soft); /* fallback when color-mix() is unsupported */
+    background: color-mix(in srgb, var(--dms-accent) 20%, transparent);
+    transition: width var(--dms-transition-fast) linear;
+    pointer-events: none;
+}
+
+/* Content sits above the fill. */
+.dms-upload-row__name,
+.dms-upload-row__status,
+.dms-upload-row__cancel,
+.dms-upload-row__prompt {
+    position: relative;
+    z-index:  1;
+}
+
+.dms-upload-row__name {
+    grid-column:   1;
+    grid-row:      1;
+    min-width:     0;
+    overflow:      hidden;
+    text-overflow: ellipsis;
+    white-space:   nowrap;
+    font-size:     var(--dms-font-size-sm);
+    font-weight:   var(--dms-font-weight-medium);
+    color:         var(--dms-text);
+}
+
+.dms-upload-row__status {
+    grid-column: 2;
+    grid-row:    1;
+    font-size:   var(--dms-font-size-xs);
+    color:       var(--dms-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums; /* the % doesn't jitter as it counts up */
+}
+
+.dms-upload-row__cancel {
+    grid-column: 3;
+    grid-row:    1;
+    flex-shrink: 0;
+    width:       1.5rem;
+    height:      1.5rem;
+    padding:     0;
+    border:      none;
+    border-radius: var(--dms-radius-md);
+    background:  transparent;
+    color:       var(--dms-muted);
+    cursor:      pointer;
+    line-height: 1;
+    transition:  background var(--dms-transition-fast), color var(--dms-transition-fast);
+}
+.dms-upload-row__cancel:hover { background: var(--dms-surface-alt); color: var(--dms-danger); }
+.dms-upload-row__cancel[hidden] { display: none; }
+
+/* Inline overwrite prompt (name conflict) — full-width line below the name row. */
+.dms-upload-row__prompt {
+    grid-column: 1 / -1;
+    grid-row:    2;
+    display:     flex;
+    gap:         var(--dms-space-2);
+    margin-top:  var(--dms-space-1);
+}
+
+/* ── State modifiers ── */
+/* Done: the fill stays at full width, re-tinted success as a completion cue. */
+.dms-upload-row--done   .dms-upload-row__progress {
+    background: var(--dms-success-bg); /* fallback when color-mix() is unsupported */
+    background: color-mix(in srgb, var(--dms-success) 20%, transparent);
+}
+.dms-upload-row--done   .dms-upload-row__status   { color: var(--dms-success); }
+
+.dms-upload-row--error {
+    border-color: var(--dms-danger);
+}
+.dms-upload-row--error  .dms-upload-row__status { color: var(--dms-danger); }
+
+.dms-upload-row--conflict {
+    border-color: var(--dms-warning);
+}
+.dms-upload-row--conflict .dms-upload-row__status { color: var(--dms-warning); }
+
+.dms-upload-row--skipped,
+.dms-upload-row--cancelled {
+    opacity: 0.65;
+}
+.dms-upload-row--cancelled .dms-upload-row__name { text-decoration: line-through; }

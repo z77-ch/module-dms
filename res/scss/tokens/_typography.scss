@@ -1,0 +1,25 @@
+/* DMS typography tokens on the `.dms` wrapper (ADR-018), `--dms-*` prefixed. Scale values
+   mirror the framework standard (css-conventions §3); only the names carry the dms prefix.
+   `--dms-font-family-base` uses a unique fallback stack so an embedded fragment renders
+   consistently regardless of the host's body font. */
+.dms {
+    --dms-font-family-base: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --dms-font-family-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, monospace;
+
+    --dms-font-size-xs:   0.75rem;    /* 12px */
+    --dms-font-size-sm:   0.875rem;   /* 14px */
+    --dms-font-size-md:   1rem;       /* 16px */
+    --dms-font-size-lg:   1.125rem;   /* 18px */
+    --dms-font-size-xl:   1.25rem;    /* 20px */
+    --dms-font-size-2xl:  1.5rem;     /* 24px */
+    --dms-font-size-3xl:  1.875rem;   /* 30px */
+
+    --dms-font-weight-normal:   400;
+    --dms-font-weight-medium:   500;
+    --dms-font-weight-semibold: 600;
+    --dms-font-weight-bold:     700;
+
+    --dms-line-height-tight: 1.2;
+    --dms-line-height-base:  1.5;
+    --dms-line-height-loose: 1.75;
+}
