@@ -16,6 +16,11 @@
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev"
+        }
+    },
     "require": {
         "php": ">=8.2",
         "z77/core": "^1.0",
