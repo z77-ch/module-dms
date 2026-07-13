@@ -11,6 +11,7 @@ use Z77\Core\Config\AuthRole,
     Z77\Shared\Attributes\HttpMethod,
     Z77\Module\Dms\Entities\Document,
     Z77\Module\Dms\Entities\Folder,
+    Z77\Module\Dms\Images\ImageProfileRegistry,
     Z77\Module\Dms\Repositories\FolderRepository,
     Z77\Module\Dms\Services\Authz,
     Z77\Module\Dms\Services\DocumentService,
@@ -292,7 +293,7 @@ trait DriveControllerTrait
             $doc = UploadService::create()->save(
                 file: $file,
                 folderId: $folderId,
-                profile: null,
+                profile: null, // null = AUTO: folder-assigned/inherited profile ?? partition 'default' (SaveService)
                 showOriginal: $showOriginal,
                 createdBy: $createdBy,
                 overwrite: $overwrite,
@@ -390,6 +391,20 @@ trait DriveControllerTrait
             if ($doc !== null && $mode !== $doc->getDeliveryMode()) {
                 $svc->setDeliveryMode($id, $mode);
             }
+            if ($doc !== null && $doc->getKind() === 'image') {
+                $alt = $caption = [];
+                foreach (DI::getI18n()->getLanguages() as $lang) {
+                    if (($v = trim((string) ($body['alt_' . $lang] ?? ''))) !== '') {
+                        $alt[$lang] = $v;
+                    }
+                    if (($v = trim((string) ($body['caption_' . $lang] ?? ''))) !== '') {
+                        $caption[$lang] = $v;
+                    }
+                }
+                if ($alt !== $doc->getAltMap() || $caption !== $doc->getCaptionMap()) {
+                    $svc->setImageText($id, $alt, $caption);
+                }
+            }
             return;
         }
 
@@ -417,6 +432,13 @@ trait DriveControllerTrait
         $mode = $this->modeParam($body);
         if ($mode !== $folder->getDeliveryMode()) {
             $svc->setFolderDeliveryMode($id, $mode);
+        }
+        if (array_key_exists('profile', $body)) { // field is only rendered when the partition has profiles
+            $profile = trim((string) $body['profile']);
+            $profile = $profile === '' ? null : $profile;
+            if ($profile !== $folder->getProfile()) {
+                $this->folderService()->setProfile($id, $profile);
+            }
         }
     }
 
@@ -447,6 +469,10 @@ trait DriveControllerTrait
                 'modeLocked'    => false,
                 'keyEditable'   => false,
                 'key'           => null,
+                'isImage'       => $doc->getKind() === 'image',
+                'languages'     => DI::getI18n()->getLanguages(),
+                'altMap'        => $doc->getAltMap(),
+                'captionMap'    => $doc->getCaptionMap(),
                 'aces'          => $this->aceRows('document', $id),
                 'entityCsrf'    => $csrf,
             ];
@@ -458,20 +484,31 @@ trait DriveControllerTrait
             && $this->folderRepo()->find($folder->getParentId())?->getParentId() === null;
         $isSuper     = Authz::create()->isSuperUser();
 
+        // Image profile (folder-assigned, inherited down): offer the field only when the
+        // folder's partition has project profiles at all — no dead dropdown.
+        $profileOptions = [];
+        if (!$isDriveRoot) {
+            $ident          = $svc->partitionIdentOf($id);
+            $profileOptions = $ident !== null ? ImageProfileRegistry::fromConfig()->names($ident) : [];
+        }
+
         return [
-            'type'          => 'folder',
-            'id'            => $id,
-            'name'          => $folder->getName(),
-            'originalName'  => null,
-            'ownMode'       => $folder->getDeliveryMode(),
-            'effectiveMode' => $svc->effectiveFolderDeliveryMode($folder),
-            'sealedAbove'   => $svc->hasSealedAncestor('folder', $id),
-            'nameLocked'    => $isDriveRoot || ($isPartition && ($folder->isSystem() || !$isSuper)),
-            'modeLocked'    => $isDriveRoot,
-            'keyEditable'   => $isSuper && $isPartition && !$folder->isSystem(),
-            'key'           => $folder->getKey(),
-            'aces'          => $this->aceRows('folder', $id),
-            'entityCsrf'    => $csrf,
+            'type'             => 'folder',
+            'id'               => $id,
+            'name'             => $folder->getName(),
+            'originalName'     => null,
+            'ownMode'          => $folder->getDeliveryMode(),
+            'effectiveMode'    => $svc->effectiveFolderDeliveryMode($folder),
+            'sealedAbove'      => $svc->hasSealedAncestor('folder', $id),
+            'nameLocked'       => $isDriveRoot || ($isPartition && ($folder->isSystem() || !$isSuper)),
+            'modeLocked'       => $isDriveRoot,
+            'keyEditable'      => $isSuper && $isPartition && !$folder->isSystem(),
+            'key'              => $folder->getKey(),
+            'ownProfile'       => $folder->getProfile(),
+            'effectiveProfile' => $svc->effectiveFolderProfile($folder),
+            'profileOptions'   => $profileOptions,
+            'aces'             => $this->aceRows('folder', $id),
+            'entityCsrf'       => $csrf,
         ];
     }
 

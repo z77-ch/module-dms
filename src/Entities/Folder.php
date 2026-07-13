@@ -75,6 +75,17 @@ class Folder implements TreeNode
     /** `sealed|protected|public`; null = inherit from the parent chain (ADR-017). */
     private ?string $deliveryMode = null;
 
+    /**
+     * Image-profile name for uploads into this subtree; null = inherit from the parent
+     * chain (same inheritance pattern as {@see $deliveryMode}). The name references a
+     * profile of the folder's PARTITION in the project's DMS `imageProfilesConfig`
+     * (partition-namespaced, project override). Server-controlled — assignment goes
+     * through the gated `FolderService::setProfile()`, which validates the name against
+     * the registry; the setter only normalizes (an unknown-but-well-formed name here is
+     * harmless: resolution falls back to `default`/none at save time).
+     */
+    private ?string $profile = null;
+
     public function getId(): ?int { return $this->id; }
     public function getName(): string { return $this->name; }
     public function getKey(): ?string { return $this->key; }
@@ -83,6 +94,7 @@ class Folder implements TreeNode
     public function isActive(): bool { return $this->active; }
     public function getSlug(): string { return $this->slug; }
     public function getDeliveryMode(): ?string { return $this->deliveryMode; }
+    public function getProfile(): ?string { return $this->profile; }
 
     public function setName(string $name): void { $this->name = $name; }
 
@@ -109,5 +121,12 @@ class Folder implements TreeNode
     public function setDeliveryMode(?string $deliveryMode): void
     {
         $this->deliveryMode = in_array($deliveryMode, ['sealed', 'protected', 'public'], true) ? $deliveryMode : null;
+    }
+
+    /** Normalizing setter (pattern {@see setDeliveryMode}): empty/malformed → null. */
+    public function setProfile(?string $profile): void
+    {
+        $profile = $profile !== null ? trim($profile) : null;
+        $this->profile = ($profile !== null && preg_match('/^[a-z0-9_-]+$/i', $profile)) ? $profile : null;
     }
 }

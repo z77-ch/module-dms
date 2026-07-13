@@ -14,8 +14,10 @@ use Z77\Shared\Traits\ArrayMappable;
  * Most fields are **server-controlled** (no `#[Clean]`): they come from the upload/save
  * pipeline (sniffed MIME, classified kind, size, checksum, source) or from controlled
  * operations (delivery mode / ACL, move, soft-delete), never from a crafted edit form.
- * The only user-editable fields are `displayName` (rename) and `showOriginal` (the
- * "serve the original untouched" toggle, OPEN-8) — both still validated server-side.
+ * The only user-editable fields are `displayName` (rename), `showOriginal` (the
+ * "serve the original untouched" toggle, OPEN-8), and the localized image texts `alt` /
+ * `caption` (per-language maps, set via the Drive edit modal through the gated
+ * `DocumentService::setImageText()`) — all still validated server-side.
  * There is NO `area` field (ADR-020): a document's scope IS its position in the folder
  * tree — the root its `folderId` chain leads to, derived, never stored.
  *
@@ -84,6 +86,12 @@ class Document
     /** Module-specific free data (e.g. invoice number) — avoids schema churn. */
     private array $meta = [];
 
+    /** Localized alt text (images): `{ lang: text }`. User-editable via the Drive edit modal. */
+    private array $alt = [];
+
+    /** Localized caption / figcaption (images): `{ lang: text }`. User-editable via the Drive edit modal. */
+    private array $caption = [];
+
     // ── DMS ownership + ACL + delivery (ADR-017) ───────────────────────────────
 
     /** Owning principal (user id) — implicit full access (ADR-017). Server-controlled. */
@@ -123,6 +131,8 @@ class Document
     public function showOriginal(): bool { return $this->showOriginal; }
     public function getVariants(): array { return $this->variants; }
     public function getMeta(): array { return $this->meta; }
+    public function getAltMap(): array { return $this->alt; }
+    public function getCaptionMap(): array { return $this->caption; }
     public function getOwnerId(): ?int { return $this->ownerId; }
     public function isActive(): bool { return $this->active; }
     public function getSlug(): string { return $this->slug; }
@@ -159,6 +169,8 @@ class Document
     public function setShowOriginal(bool $showOriginal): void { $this->showOriginal = $showOriginal; }
     public function setVariants(mixed $variants): void { $this->variants = is_array($variants) ? $variants : []; }
     public function setMeta(mixed $meta): void { $this->meta = is_array($meta) ? $meta : []; }
+    public function setAlt(mixed $alt): void { $this->alt = is_array($alt) ? $alt : []; }
+    public function setCaption(mixed $caption): void { $this->caption = is_array($caption) ? $caption : []; }
     public function setOwnerId(?int $ownerId): void
     {
         $this->ownerId = ($ownerId !== null && $ownerId > 0) ? $ownerId : null;

@@ -6,6 +6,7 @@ use Z77\Core\DI;
 use Z77\Core\Exception\NotFoundException;
 use Z77\Persistence\Resolver\UnifiedEntityManager;
 use Z77\Module\Dms\Entities\Folder;
+use Z77\Module\Dms\Images\ImageProfileRegistry;
 use Z77\Module\Dms\Repositories\FolderRepository;
 use Z77\Shared\Libraries\Convention\Naming;
 use Z77\Shared\Tree\TreeService;
@@ -175,6 +176,48 @@ final class FolderService
         }
 
         $folder->setKey($key); // validates the slug charset (S2); throws on garbage
+        $this->em->persist($folder);
+        $this->em->flush();
+
+        return $folder;
+    }
+
+    /**
+     * Assign (or clear) a folder's image profile — the name of a profile of the folder's
+     * PARTITION in the project's DMS `imageProfilesConfig` (partition-namespaced, project
+     * override). Uploads into the subtree resolve it via inheritance at save time
+     * (`SaveService`); clearing (`null`/`''`) restores inheritance from the parent chain.
+     * Gate: effective `manage` (like {@see rename}); the drive root never carries a
+     * profile. No re-materialization — profiles do not change URLs or bytes.
+     *
+     * @throws \InvalidArgumentException unknown profile for the partition / `admin` / drive root
+     */
+    public function setProfile(int $id, ?string $profile): Folder
+    {
+        $this->authz->require('folder', $id, 'manage');
+        $folder = $this->require($id);
+        if ($folder->getParentId() === null) {
+            throw new \InvalidArgumentException('Der Drive-Root kann kein Bildprofil tragen.');
+        }
+
+        $profile = $profile !== null ? trim($profile) : null;
+        $profile = $profile === '' ? null : $profile;
+        if ($profile !== null) {
+            // `admin` is framework-fixed (always generated) and never an assignment;
+            // anything else must exist in the partition's config block.
+            $ident = $this->documents->partitionIdentOf($id);
+            if (
+                $profile === ImageProfileRegistry::ADMIN
+                || $ident === null
+                || !ImageProfileRegistry::fromConfig()->has($ident, $profile)
+            ) {
+                throw new \InvalidArgumentException(
+                    "Das Bildprofil '{$profile}' ist für diesen Bereich nicht definiert."
+                );
+            }
+        }
+
+        $folder->setProfile($profile);
         $this->em->persist($folder);
         $this->em->flush();
 

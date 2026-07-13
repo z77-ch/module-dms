@@ -18,8 +18,15 @@
  * @var bool    $modeLocked     drive root (mode fixed null)
  * @var bool    $keyEditable    folder only: SUPER_USER + human partition
  * @var ?string $key            folder only: current key
+ * @var ?string $ownProfile        folder only: own image-profile assignment (null = inherit)
+ * @var ?string $effectiveProfile  folder only: effective profile (inheritance applied)
+ * @var list<string> $profileOptions folder only: partition's project profiles ([] = hide the field)
  * @var list<array{subjectType:string, subjectId:string, rights:string}> $aces
  * @var string  $entityCsrf
+ * @var bool         $isImage    document only: kind === image (shows the alt/caption fields)
+ * @var list<string> $languages  document only: configured languages for the alt/caption inputs
+ * @var array<string,string> $altMap      document only: current localized alt map
+ * @var array<string,string> $captionMap  document only: current localized caption map
  */
 $rightsList = ['read' => 'Lesen', 'write' => 'Schreiben', 'manage' => 'Verwalten'];
 $modes = [
@@ -73,7 +80,40 @@ $nameField = $type === 'folder' ? 'name' : 'display_name';
                     Key: <code><?= e($key) ?></code> (fest — Modul-Adresse)
                 </p>
                 <?php endif; ?>
+
+                <?php if ($type === 'folder' && ($profileOptions ?? []) !== []): ?>
+                <div class="be-form__field" data-z77-field-wrapper>
+                    <label>Bildprofil <small>(Bildgrössen für Uploads in diesem Ordner, vererbt an Unterordner)</small></label>
+                    <select name="profile">
+                        <option value="">Geerbt / keines<?= ($ownProfile ?? null) === null && ($effectiveProfile ?? null) !== null ? ' — effektiv: ' . e($effectiveProfile) : '' ?></option>
+                        <?php foreach (($profileOptions ?? []) as $p): ?>
+                        <option value="<?= e($p) ?>"<?= ($ownProfile ?? null) === $p ? ' selected' : '' ?>><?= e($p) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p style="font-size:.8rem;color:var(--be-muted,#94a3b8);margin:.2rem 0 0">
+                        Ohne Zuordnung greift das Profil «default» des Bereichs (falls definiert), sonst nur die Standard-Grössen.
+                    </p>
+                </div>
+                <?php endif; ?>
             </div>
+
+            <?php if ($type === 'document' && ($isImage ?? false) && ($languages ?? [])): ?>
+            <hr style="border:none;border-top:1px solid var(--be-border,#334155);margin:.75rem 0">
+            <p style="font-size:.85rem;margin:0 0 .4rem"><strong>Bildtexte</strong>
+                <span style="color:var(--be-muted,#94a3b8)">— Alt (Barrierefreiheit/SEO) &amp; Bildunterschrift, je Sprache</span></p>
+            <div class="be-form__grid" style="grid-template-columns:1fr">
+                <?php foreach (($languages ?? []) as $lang): ?>
+                <div class="be-form__field" data-z77-field-wrapper>
+                    <label>Alt-Text <small>(<?= e(strtoupper($lang)) ?>)</small></label>
+                    <input type="text" name="alt_<?= e($lang) ?>" value="<?= e($altMap[$lang] ?? '') ?>" autocomplete="off">
+                </div>
+                <div class="be-form__field" data-z77-field-wrapper>
+                    <label>Bildunterschrift <small>(<?= e(strtoupper($lang)) ?>)</small></label>
+                    <input type="text" name="caption_<?= e($lang) ?>" value="<?= e($captionMap[$lang] ?? '') ?>" autocomplete="off">
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
 
             <?php if (!$modeLocked): ?>
             <hr style="border:none;border-top:1px solid var(--be-border,#334155);margin:.75rem 0">

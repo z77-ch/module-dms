@@ -12,7 +12,10 @@
     "autoload": {
         "psr-4": {
             "Z77\\Module\\Dms\\": "src/"
-        }
+        },
+        "files": [
+            "src/helpers.php"
+        ]
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

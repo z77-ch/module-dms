@@ -42,7 +42,7 @@ final class SaveService
         return new self(
             new LocalBlobStorage(),
             DI::getUnifiedEntityManager(),
-            ImageProfileRegistry::fromModules(),
+            ImageProfileRegistry::fromConfig(),
             new GdImageProcessor(),
         );
     }
@@ -75,7 +75,7 @@ final class SaveService
         $doc->setChecksum(hash('sha256', $bytes));
         $doc->setSource($req->source);
         $doc->setShowOriginal($req->showOriginal);
-        $doc->setProfile($req->profile);
+        $doc->setProfile($this->resolveProfile($req)?->name); // the RESOLVED profile (auto or explicit)
         $doc->setRetentionUntil($req->retentionUntil);
         $doc->setMeta($req->meta);
         // DMS rebuild (ADR-017 / R1): ownership, active gate, slug, image dimensions.
@@ -156,7 +156,7 @@ final class SaveService
         $doc->setChecksum($sum);
         $doc->setSource($req->source);
         $doc->setShowOriginal($req->showOriginal);
-        $doc->setProfile($req->profile);
+        $doc->setProfile($this->resolveProfile($req)?->name); // the RESOLVED profile (auto or explicit)
         $doc->setRetentionUntil($req->retentionUntil);
         $doc->setMeta($req->meta);
         $doc->setOwnerId($req->ownerId ?? $req->createdBy);
@@ -393,31 +393,21 @@ final class SaveService
 
     /**
      * Which variant specs to produce: when the original is preserved (per-document
-     * `showOriginal` or per-profile `preserveOriginal`), only the framework thumbnail;
-     * otherwise the full `admin` set plus the selected project profile.
+     * `showOriginal` or per-profile `preserveOriginal`), only the framework thumbnail.
+     * When a PROJECT profile resolves ({@see resolveProfile} — explicit request name,
+     * else the folder-assigned/inherited profile, else the partition's `default`), the
+     * `admin` contribution shrinks to the two sizes the management tool actually uses —
+     * the list thumbnail (`s`) and the preview-pane size (`m`) — plus the project
+     * variants; the big `l`/`xl` sizes would only duplicate the project's own large
+     * variants (decided with the dev 2026-07-13). Without a project profile the FULL
+     * `admin` ladder is generated — it is then the only usable size set.
      *
      * @return list<\Z77\Module\Dms\Images\VariantSpec>
      */
     private function specsFor(SaveRequest $req): array
     {
-        $admin   = $this->profiles->admin();
-        $profile = null;
-
-        if ($req->profile !== null) {
-            // Project profiles are module-owned and resolved via the partition's root
-            // `key` (ADR-020 / S7). A document under a keyless (human-created) root has
-            // no module profiles — only `admin` resolves there.
-            $rootKey = $this->rootKeyOf($req->folderId);
-            $profile = $rootKey !== null ? $this->profiles->get($rootKey, $req->profile) : null;
-            if ($profile === null && $req->profile !== ImageProfileRegistry::ADMIN) {
-                throw new \RuntimeException(
-                    "SaveService: image profile '{$req->profile}' is not defined for root '"
-                    . ($rootKey ?? '(keyless)') . "'."
-                );
-            }
-            $profile ??= $this->profiles->admin();
-        }
-
+        $admin    = $this->profiles->admin();
+        $profile  = $this->resolveProfile($req);
         $preserve = $req->showOriginal || ($profile?->preserveOriginal ?? false);
 
         if ($preserve) {
@@ -425,11 +415,19 @@ final class SaveService
             return $thumb !== null ? [$thumb] : [];
         }
 
-        $specs = array_values($admin->variants);
-        if ($profile !== null) {
-            foreach ($profile->variants as $spec) {
+        if ($profile === null || $profile === $admin) {
+            return array_values($admin->variants); // no project profile → full admin ladder
+        }
+
+        $specs = [];
+        foreach ([ImageProfileRegistry::ADMIN_THUMB, ImageProfileRegistry::ADMIN_PREVIEW] as $name) {
+            $spec = $admin->variant($name);
+            if ($spec !== null) {
                 $specs[] = $spec;
             }
+        }
+        foreach ($profile->variants as $spec) {
+            $specs[] = $spec;
         }
 
         return $specs;
@@ -453,11 +451,58 @@ final class SaveService
     }
 
     /**
-     * The `key` of the PARTITION the folder belongs to (the chain link just below the
-     * drive root, ADR-021), or null (keyless human partition / broken chain / the drive
-     * root itself). Derived, never stored (ADR-020).
+     * Resolve the project {@see \Z77\Module\Dms\Images\ImageProfile} for a save request.
+     *
+     * Explicit `$req->profile` keeps the strict semantics: it must exist in the target
+     * partition (or be the framework `admin`), otherwise the save throws — a programmatic
+     * caller naming a profile expects exactly that set.
+     *
+     * `$req->profile === null` means AUTO (the Drive upload and any caller without an
+     * explicit choice): the effective folder profile (the target folder's own
+     * `Folder::$profile`, else the nearest ancestor's — the `deliveryMode` inheritance
+     * pattern) decides, else the partition's `default` profile, else no project profile
+     * (only the `admin` derivatives). Lenient by design: a stale folder assignment (the
+     * config lost the profile later) falls back instead of failing the upload.
+     *
+     * Returns null when no project profile applies (the `admin` set is always added by
+     * {@see specsFor} regardless).
      */
-    private function rootKeyOf(?int $folderId): ?string
+    private function resolveProfile(SaveRequest $req): ?\Z77\Module\Dms\Images\ImageProfile
+    {
+        [$ident, $folderProfile] = $this->chainInfoOf($req->folderId);
+
+        if ($req->profile !== null) {
+            if ($req->profile === ImageProfileRegistry::ADMIN) {
+                return $this->profiles->admin();
+            }
+            $profile = $ident !== null ? $this->profiles->get($ident, $req->profile) : null;
+            if ($profile === null) {
+                throw new \RuntimeException(
+                    "SaveService: image profile '{$req->profile}' is not defined for partition '"
+                    . ($ident ?? '(unresolved)') . "'."
+                );
+            }
+            return $profile;
+        }
+
+        if ($ident === null) {
+            return null;
+        }
+        $profile = $folderProfile !== null ? $this->profiles->get($ident, $folderProfile) : null;
+
+        return $profile ?? $this->profiles->get($ident, ImageProfileRegistry::DEFAULT);
+    }
+
+    /**
+     * Walk the folder chain up to the drive root and collect the two profile-resolution
+     * inputs in one pass: the PARTITION ident (`key ?? slug` of the chain link just below
+     * the root — a keyless human partition is addressed by its slug, the `?key=` mount
+     * pattern) and the EFFECTIVE folder profile (the start folder's own `profile`, else
+     * the nearest ancestor's, partition included). Derived, never stored (ADR-020).
+     *
+     * @return array{0: ?string, 1: ?string} [partitionIdent, effectiveFolderProfile]
+     */
+    private function chainInfoOf(?int $folderId): array
     {
         $repo  = $this->em->getRepository(\Z77\Module\Dms\Entities\Folder::class);
         $index = [];
@@ -467,23 +512,26 @@ final class SaveService
             }
         }
 
-        $cur   = $folderId;
-        $prev  = null;
-        $guard = 50;
+        $cur     = $folderId;
+        $prev    = null;
+        $profile = null;
+        $guard   = 50;
         while ($cur !== null && $guard-- > 0) {
             $folder = $index[$cur] ?? null;
             if ($folder === null) {
-                return null;
+                return [null, null];
             }
             if ($folder->getParentId() === null) {
                 // $folder is the drive root; the previous link is the partition.
-                return $prev?->getKey();
+                $ident = $prev?->getKey() ?? ($prev !== null && $prev->getSlug() !== '' ? $prev->getSlug() : null);
+                return [$ident, $profile];
             }
+            $profile ??= $folder->getProfile();
             $prev = $folder;
             $cur  = $folder->getParentId();
         }
 
-        return null;
+        return [null, null];
     }
 
     /**

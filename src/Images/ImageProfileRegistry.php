@@ -5,20 +5,25 @@ namespace Z77\Module\Dms\Images;
 use Z77\Core\DI;
 
 /**
- * Resolves image profiles (OPEN-8) **module-scoped**: every module that needs images ships
- * its own `App/Config/imageProfilesConfig.inc.php`, and a profile is looked up under the
- * module's key — which is the partition root's `key` (ADR-020): a document's module is
- * the `key` of the root folder its chain leads to. This honours the rule "config lives in
- * the module that needs it" and structurally prevents cross-module name collisions
- * (frontend's `logo` ≠ backend's `logo`). Documents under a keyless (human-created) root
- * have no module profiles — only the framework-fixed `admin` profile resolves (S7).
+ * Resolves image profiles (OPEN-8) **partition-scoped** from ONE project-owned config:
+ * the DMS `App/Config/imageProfilesConfig.inc.php`, provided by the PROJECT via the
+ * override tree (`override/z77/module/dms/...` — the framework package ships none).
+ * Structure is two-level: `partitionIdent => profileName => variantSpecs`, where the
+ * partition ident is the root folder's `key ?? slug` (ADR-020 rev.: profiles are
+ * project-specific DMS management data, not module code — a keyless, human-created
+ * partition like `front` is addressed by its slug, the same pattern as the Drive's
+ * `?key=` mount resolution). The per-partition namespace keeps the collision safety of
+ * the former module-owned files (`front`'s `logo` ≠ `back`'s `logo`) in one file.
+ *
+ * The profile name `default` is the per-partition fallback: the save path uses it when
+ * neither the target folder nor an ancestor carries a `Folder::$profile` assignment.
  *
  * The `admin` profile is **framework-fixed**, not project config: it provides the
  * management tool's list-thumbnail + preview-pane sizes and is generated for every image
  * so the tool is universally browsable. A project cannot remove or override it.
  *
- * Not a DI singleton (placement decision B): the consumer (save path, Phase 3) builds it
- * once via {@see fromModules()} at the boundary. The plain constructor takes already
+ * Not a DI singleton (placement decision B): the consumer (save path / Drive UI) builds
+ * it via {@see fromConfig()} at the boundary. The plain constructor takes already
  * resolved profiles and stays dependency-free for isolated testing.
  */
 final class ImageProfileRegistry
@@ -26,8 +31,14 @@ final class ImageProfileRegistry
     /** Framework-fixed profile name for the management tool's previews. */
     public const ADMIN = 'admin';
 
+    /** Per-partition fallback profile name (used when no folder carries an assignment). */
+    public const DEFAULT = 'default';
+
     /** The single small thumbnail always produced, even when the original is preserved. */
     public const ADMIN_THUMB = 's';
+
+    /** The Drive preview-pane size — kept alongside the thumb when a project profile applies. */
+    public const ADMIN_PREVIEW = 'm';
 
     /** Built-in `admin` profile widths (framework-fixed, OPEN-8). */
     private const ADMIN_VARIANTS = [
@@ -40,54 +51,54 @@ final class ImageProfileRegistry
     private ImageProfile $admin;
 
     /**
-     * @param array<string, array<string, ImageProfile>> $byModule moduleKey => (name => profile)
+     * @param array<string, array<string, ImageProfile>> $byPartition partitionIdent => (name => profile)
      */
-    public function __construct(private array $byModule = [])
+    public function __construct(private array $byPartition = [])
     {
         $this->admin = ImageProfile::fromConfig(self::ADMIN, self::ADMIN_VARIANTS);
     }
 
     /**
-     * Build the registry by reading each module's optional
-     * `App/Config/imageProfilesConfig.inc.php`. A module without the file simply
-     * contributes no project profiles.
+     * Build the registry from the project's DMS profile config
+     * (`App/Config/imageProfilesConfig.inc.php` in the `Z77\Module\Dms` namespace — the
+     * project override wins per FileFinder source order). A missing file simply means
+     * "no project profiles" (only `admin` resolves).
      */
-    public static function fromModules(): self
+    public static function fromConfig(): self
     {
-        $moduleManager = DI::getModuleManager();
-        $configManager = DI::getConfigManager();
+        $config = DI::getConfigManager()->getArrayConfig(
+            configName: 'App/Config/imageProfilesConfig',
+            nameSpace: 'Z77\\Module\\Dms\\',
+            throwError: false,
+        );
 
-        $byModule = [];
-        foreach ($moduleManager->getModuleKeys() as $moduleKey) {
-            $nameSpace = $moduleManager->getNamespacePrefix($moduleKey);
-
-            $config = $configManager->getArrayConfig(
-                configName: 'App/Config/imageProfilesConfig',
-                nameSpace: $nameSpace,
-                throwError: false,
-            );
-
+        $byPartition = [];
+        foreach ($config->getAll() as $partitionIdent => $profilesCfg) {
+            if (!is_array($profilesCfg)) {
+                throw new \InvalidArgumentException(
+                    "imageProfilesConfig: partition '{$partitionIdent}' must be an array of profiles."
+                );
+            }
             $profiles = [];
-            foreach ($config->getAll() as $profileName => $profileCfg) {
+            foreach ($profilesCfg as $profileName => $profileCfg) {
                 if (!is_array($profileCfg)) {
                     throw new \InvalidArgumentException(
-                        "imageProfilesConfig ({$moduleKey}): profile '{$profileName}' must be a config array."
+                        "imageProfilesConfig ({$partitionIdent}): profile '{$profileName}' must be a config array."
                     );
                 }
                 if ($profileName === self::ADMIN) {
                     throw new \InvalidArgumentException(
-                        "imageProfilesConfig ({$moduleKey}): 'admin' is a framework-fixed profile and cannot be redefined."
+                        "imageProfilesConfig ({$partitionIdent}): 'admin' is a framework-fixed profile and cannot be redefined."
                     );
                 }
                 $profiles[$profileName] = ImageProfile::fromConfig((string) $profileName, $profileCfg);
             }
-
             if ($profiles !== []) {
-                $byModule[$moduleKey] = $profiles;
+                $byPartition[(string) $partitionIdent] = $profiles;
             }
         }
 
-        return new self($byModule);
+        return new self($byPartition);
     }
 
     /**
@@ -99,21 +110,32 @@ final class ImageProfileRegistry
     }
 
     /**
-     * Resolve a profile by name within a module (= partition-root `key`, ADR-020).
-     * `admin` resolves globally; any other name is looked up under the given module key.
+     * Resolve a profile by name within a partition (root `key ?? slug`, ADR-020 rev.).
+     * `admin` resolves globally; any other name is looked up under the partition ident.
      * Returns null if unknown.
      */
-    public function get(string $moduleKey, string $name): ?ImageProfile
+    public function get(string $partitionIdent, string $name): ?ImageProfile
     {
         if ($name === self::ADMIN) {
             return $this->admin;
         }
 
-        return $this->byModule[$moduleKey][$name] ?? null;
+        return $this->byPartition[$partitionIdent][$name] ?? null;
     }
 
-    public function has(string $moduleKey, string $name): bool
+    public function has(string $partitionIdent, string $name): bool
     {
-        return $this->get($moduleKey, $name) !== null;
+        return $this->get($partitionIdent, $name) !== null;
+    }
+
+    /**
+     * The project profile names available in a partition (for the Drive's folder-edit
+     * dropdown). Empty when the partition has no config block.
+     *
+     * @return list<string>
+     */
+    public function names(string $partitionIdent): array
+    {
+        return array_keys($this->byPartition[$partitionIdent] ?? []);
     }
 }

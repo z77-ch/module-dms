@@ -5,6 +5,7 @@ namespace Z77\Module\Dms\Services;
 use Z77\Core\DI;
 use Z77\Core\Exception\NotFoundException;
 use Z77\Core\Http\Response\FileResponse;
+use Z77\Core\Libraries\Cache\DataCache;
 use Z77\Module\Dms\Blob\BlobStorage;
 use Z77\Module\Dms\Blob\LocalBlobStorage;
 use Z77\Persistence\Resolver\UnifiedEntityManager;
@@ -40,6 +41,9 @@ use Z77\Shared\Libraries\Convention\Naming;
  */
 final class DocumentService
 {
+    /** DataCache namespace for the media-url resolve indexes (see media-url-helper-bauplan). */
+    private const CACHE_NS = 'DmsMediaUrl';
+
     public function __construct(
         private DocumentRepository $documents,
         private FolderRepository $folders,
@@ -48,6 +52,7 @@ final class DocumentService
         private SaveService $saveService,
         private AccessControlEntryRepository $aces,
         private Authz $authz,
+        private DataCache $cache,
     ) {}
 
     public static function create(): self
@@ -62,6 +67,7 @@ final class DocumentService
             SaveService::create(),
             $uem->getRepository(AccessControlEntry::class),
             Authz::create(),
+            DI::getCacheManager()->data(),
         );
     }
 
@@ -124,6 +130,21 @@ final class DocumentService
         $rootId = $this->rootIdOf($folderId, $index);
 
         return $rootId !== null ? ($index[$rootId] ?? null) : null;
+    }
+
+    /**
+     * The partition IDENT of a folder for image-profile resolution: the partition root's
+     * `key ?? slug` (a keyless, human-created partition is addressed by its slug — the
+     * `?key=` mount pattern; ADR-020 rev.). Null for an unknown folder / the drive root.
+     */
+    public function partitionIdentOf(int $folderId): ?string
+    {
+        $root = $this->rootOf($folderId);
+        if ($root === null) {
+            return null;
+        }
+
+        return $root->getKey() ?? ($root->getSlug() !== '' ? $root->getSlug() : null);
     }
 
     /**
@@ -345,12 +366,18 @@ final class DocumentService
      */
     private function variantExt(Document $doc, string $variantName): string
     {
-        if ($variantName === BlobStorage::ORIGINAL) {
-            return $doc->getExt();
-        }
-        $meta = $doc->getVariants()[$variantName] ?? null;
+        return self::variantExtFromMap($variantName, $doc->getVariants(), $doc->getExt());
+    }
 
-        return (is_array($meta) && !empty($meta['ext'])) ? (string) $meta['ext'] : $doc->getExt();
+    /** Ext of a variant from a stored variants map (entity-free twin of {@see variantExt}). */
+    private static function variantExtFromMap(string $variantName, array $variants, string $docExt): string
+    {
+        if ($variantName === BlobStorage::ORIGINAL) {
+            return $docExt;
+        }
+        $meta = $variants[$variantName] ?? null;
+
+        return (is_array($meta) && !empty($meta['ext'])) ? (string) $meta['ext'] : $docExt;
     }
 
     /** Best-effort MIME for a served image derivative, by extension; `$fallback` otherwise. */
@@ -382,23 +409,124 @@ final class DocumentService
      */
     public function publicUrl(Document $doc, ?string $variant = null): ?string
     {
-        if ($doc->isDeleted() || $doc->getSlug() === '') {
-            return null;
-        }
-        if ($variant !== null && !array_key_exists($variant, $doc->getVariants())) {
-            return null;
-        }
-        $relPath = $this->folderSlugPath($doc);
-        if ($relPath === '') {
+        if ($doc->isDeleted()) {
             return null;
         }
 
-        $ext  = $variant !== null ? $this->variantExt($doc, $variant) : $doc->getExt();
-        $file = $doc->getSlug()
-            . ($variant !== null ? '.' . $variant : '')
-            . '.' . $ext;
+        return $this->buildPublicUrl(
+            $this->folderSlugPath($doc),
+            $doc->getSlug(),
+            $variant,
+            $doc->getExt(),
+            $doc->getVariants(),
+            $doc->getChecksum(),
+        );
+    }
 
-        return '/media/' . $relPath . '/' . $file . '?v=' . substr($doc->getChecksum(), 0, 8);
+    /**
+     * The single `/media` URL assembler — used by {@see publicUrl()} (entity path) AND the
+     * cached {@see urlForPath()} (template path), so both produce byte-identical URLs. Returns
+     * null for an unslugged document, a broken/empty folder-slug chain, or a missing variant.
+     * Appends the `?v=<checksum>` content-version token.
+     */
+    private function buildPublicUrl(
+        string $relPath,
+        string $slug,
+        ?string $variant,
+        string $docExt,
+        array $variants,
+        string $checksum,
+    ): ?string {
+        if ($slug === '' || $relPath === '') {
+            return null;
+        }
+        if ($variant !== null && !array_key_exists($variant, $variants)) {
+            return null;
+        }
+        $ext  = $variant !== null ? self::variantExtFromMap($variant, $variants, $docExt) : $docExt;
+        $file = $slug . ($variant !== null ? '.' . $variant : '') . '.' . $ext;
+
+        return '/media/' . $relPath . '/' . $file . '?v=' . substr($checksum, 0, 8);
+    }
+
+    /**
+     * Public `/media` URL for a document addressed by its structural slug path
+     * (`'front/imgs/logo.png'` = partition-root slug + folder slugs + `<slug>.<ext>`).
+     * Combines {@see resolve()} + {@see publicUrl()} so a caller (e.g. the `mediaUrl()`
+     * template helper) never walks the tree itself. `$variant` selects an image variant
+     * of the SAME document (the path always names the original leaf).
+     *
+     * Returns null when the path resolves to nothing (unknown / soft-deleted / ambiguous).
+     * Builds the URL blindly like {@see publicUrl()} — it does NOT gate on `deliveryMode`;
+     * a non-public document yields a URL that 404s at delivery.
+     */
+    public function urlForPath(string $path, ?string $variant = null): ?string
+    {
+        $key   = implode('/', array_filter(explode('/', $path), static fn($s) => $s !== ''));
+        $entry = $this->publicPathIndex()[$key] ?? null;
+        if ($entry === null) {
+            return null;
+        }
+
+        return $this->buildPublicUrl(
+            $entry['relPath'],
+            $entry['slug'],
+            $variant,
+            $entry['ext'],
+            $entry['variants'],
+            $entry['checksum'],
+        );
+    }
+
+    /**
+     * The template-facing image bundle for a DMS document by structural slug path: the public
+     * URL plus the localized `alt` / `caption` (current request language → i18n default → empty,
+     * the {@see t()} resolution order) and the intrinsic pixel dimensions. Backs the
+     * {@see \mediaImage()} helper; same index + cache as {@see urlForPath}. Returns null when the
+     * path resolves to nothing.
+     *
+     * @return array{url: string, alt: string, caption: string, width: ?int, height: ?int}|null
+     */
+    public function imageForPath(string $path, ?string $variant = null): ?array
+    {
+        $key   = implode('/', array_filter(explode('/', $path), static fn($s) => $s !== ''));
+        $entry = $this->publicPathIndex()[$key] ?? null;
+        if ($entry === null) {
+            return null;
+        }
+        $url = $this->buildPublicUrl(
+            $entry['relPath'], $entry['slug'], $variant, $entry['ext'], $entry['variants'], $entry['checksum'],
+        );
+        if ($url === null) {
+            return null;
+        }
+
+        return [
+            'url'     => $url,
+            'alt'     => $this->localizeMap($entry['alt'] ?? []),
+            'caption' => $this->localizeMap($entry['caption'] ?? []),
+            'width'   => $entry['width'] ?? null,
+            'height'  => $entry['height'] ?? null,
+        ];
+    }
+
+    /**
+     * Resolve a `{ lang: text }` map to the current request language, falling back to the i18n
+     * default language, then to the empty string (the {@see t()} resolution order).
+     *
+     * @param array<string,string> $map
+     */
+    private function localizeMap(array $map): string
+    {
+        if ($map === []) {
+            return '';
+        }
+        $current = DI::getRequest()->getLanguage();
+        if (!empty($map[$current])) {
+            return (string) $map[$current];
+        }
+
+        return (string) ($map[DI::getI18n()->getDefaultLanguage()] ?? '');
     }
 
     /**
@@ -532,6 +660,34 @@ final class DocumentService
     }
 
     /**
+     * The effective image profile of a folder: its own `profile` if set, else the nearest
+     * ancestor folder's — the {@see effectiveFolderDeliveryMode} inheritance pattern,
+     * without a default (null = no assignment anywhere; the save path then falls back to
+     * the partition's `default` profile, {@see SaveService}). Display/consistency helper —
+     * the authoritative save-time resolution walks the chain itself (`SaveService`).
+     */
+    public function effectiveFolderProfile(Folder $folder): ?string
+    {
+        $own = $folder->getProfile();
+        if ($own !== null) {
+            return $own;
+        }
+
+        $index   = $this->folderIndex();
+        $current = $folder->getParentId() !== null ? ($index[$folder->getParentId()] ?? null) : null;
+        $guard   = 50;
+        while ($current !== null && $guard-- > 0) {
+            if ($current->getProfile() !== null) {
+                return $current->getProfile();
+            }
+            $pid     = $current->getParentId();
+            $current = $pid !== null ? ($index[$pid] ?? null) : null;
+        }
+
+        return null;
+    }
+
+    /**
      * Resolve an effective delivery mode: own mode if set, else the nearest ancestor
      * folder's mode, else the default `protected`; a `sealed` anywhere in
      * `own + ancestors` caps the whole result to `sealed`. `$ancestorStartId` is where the
@@ -601,6 +757,50 @@ final class DocumentService
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
+    }
+
+    /**
+     * Set the localized image texts (`alt` / `caption`) — user-editable via the Drive edit
+     * modal, gated like {@see rename()} (effective `manage`, session principal). Each map is
+     * `{ lang: text }`; only configured languages are kept, values are trimmed + control-char
+     * stripped (they render into an HTML `alt` attribute and a `<figcaption>` — output stays
+     * `e()`-escaped), empty strings dropped so the map stays sparse.
+     *
+     * @param array<string,string> $alt
+     * @param array<string,string> $caption
+     */
+    public function setImageText(int $id, array $alt, array $caption): void
+    {
+        $this->authz->require('document', $id, 'manage');
+        $doc = $this->get($id);
+        if ($doc === null) {
+            throw new NotFoundException('Document not found.');
+        }
+
+        $doc->setAlt($this->cleanTextMap($alt));
+        $doc->setCaption($this->cleanTextMap($caption));
+        $doc->setUpdatedAt(gmdate('c'));
+        $this->em->persist($doc);
+        $this->em->flush();
+    }
+
+    /**
+     * Keep only configured languages, trim + strip control characters, drop empties.
+     *
+     * @param array<string,string> $map
+     * @return array<string,string>
+     */
+    private function cleanTextMap(array $map): array
+    {
+        $out = [];
+        foreach (DI::getI18n()->getLanguages() as $lang) {
+            $val = preg_replace('/[\x00-\x1F\x7F]/', '', trim((string) ($map[$lang] ?? ''))) ?? '';
+            if ($val !== '') {
+                $out[$lang] = $val;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -1191,6 +1391,123 @@ final class DocumentService
             }
         }
         return $index;
+    }
+
+    /**
+     * Reduced folder index (id → {parentId, slug}) for the whole tree, cached in APCu
+     * (pattern {@see AclService::folderIndex}). Entity-free so it survives serialisation;
+     * feeds {@see publicPathIndex}. Dropped on any Folder/Document write (`invalidatesCache`).
+     *
+     * @return array<int, array{parentId: ?int, slug: string}>
+     */
+    private function folderSlugIndex(): array
+    {
+        $cached = $this->cache->get(self::CACHE_NS, ['folders']);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $index = [];
+        foreach ($this->folders->findAll() as $folder) {
+            $id = $folder->getId();
+            if ($id !== null) {
+                $index[$id] = ['parentId' => $folder->getParentId(), 'slug' => $folder->getSlug()];
+            }
+        }
+        $this->cache->set(self::CACHE_NS, ['folders'], $index, cachePersist: true);
+
+        return $index;
+    }
+
+    /**
+     * The template-facing public-URL index: structural path (`"<folder-slug-chain>/<slug>.<ext>"`,
+     * the SAME string a caller passes to {@see \mediaUrl()} / {@see urlForPath}) → the minimal
+     * fields to build the URL. Cached in APCu; built once from the folder-slug index + every live
+     * document, so a page-render resolving many images pays one folders + one documents load, then
+     * O(1) lookups (instead of N× file decodes through the uncached repositories).
+     *
+     * Ambiguity is resolved like {@see resolve()}: if two live documents map to the same path
+     * (same slug+ext in the same folder) the entry is dropped — never serve a guess. Soft-deleted
+     * documents are excluded ({@see listAll}).
+     *
+     * @return array<string, array{relPath: string, slug: string, ext: string, checksum: string, variants: array, alt: array, caption: array, width: ?int, height: ?int}>
+     */
+    private function publicPathIndex(): array
+    {
+        $cached = $this->cache->get(self::CACHE_NS, ['publicPaths']);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $folders   = $this->folderSlugIndex();
+        $index     = [];
+        $ambiguous = [];
+        foreach ($this->listAll() as $doc) {
+            $slug = $doc->getSlug();
+            if ($slug === '') {
+                continue;
+            }
+            $relPath = self::slugPathForFolder($doc->getFolderId(), $folders);
+            if ($relPath === '') {
+                continue; // no folder chain / corrupt / drive-root-only → not addressable
+            }
+            $key = $relPath . '/' . $slug . '.' . $doc->getExt();
+            if (isset($index[$key])) {
+                $ambiguous[$key] = true;
+                continue;
+            }
+            $index[$key] = [
+                'relPath'  => $relPath,
+                'slug'     => $slug,
+                'ext'      => $doc->getExt(),
+                'checksum' => $doc->getChecksum(),
+                'variants' => $doc->getVariants(),
+                'alt'      => $doc->getAltMap(),
+                'caption'  => $doc->getCaptionMap(),
+                'width'    => $doc->getWidth(),
+                'height'   => $doc->getHeight(),
+            ];
+        }
+        foreach (array_keys($ambiguous) as $key) {
+            unset($index[$key]);
+        }
+        $this->cache->set(self::CACHE_NS, ['publicPaths'], $index, cachePersist: true);
+
+        return $index;
+    }
+
+    /**
+     * Folder-slug chain for a folder id over the reduced index — the entity-free twin of
+     * {@see folderSlugPath()}, same rules: the drive root (parentId null) is NOT a path segment
+     * (ADR-021), an empty slug or a dangling parent yields '' so a corrupt chain is never turned
+     * into a path.
+     *
+     * @param array<int, array{parentId: ?int, slug: string}> $folders
+     */
+    private static function slugPathForFolder(?int $folderId, array $folders): string
+    {
+        if ($folderId === null) {
+            return '';
+        }
+        $slugs = [];
+        $cur   = $folderId;
+        $guard = 50;
+        while ($cur !== null && $guard-- > 0) {
+            $folder = $folders[$cur] ?? null;
+            if ($folder === null) {
+                return '';
+            }
+            if ($folder['parentId'] === null) {
+                break; // drive root — not a path segment
+            }
+            if ($folder['slug'] === '') {
+                return '';
+            }
+            array_unshift($slugs, $folder['slug']);
+            $cur = $folder['parentId'];
+        }
+
+        return implode('/', $slugs);
     }
 
     /** Recursively remove a directory (materialization cleanup). */
