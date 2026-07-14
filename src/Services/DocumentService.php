@@ -501,12 +501,23 @@ final class DocumentService
             return null;
         }
 
+        // Dimensions must match the DELIVERED image, not the original. For a named derivative
+        // use the variant's own w/h (ProcessedVariant::toMeta); for the original (variant null)
+        // fall back to the document dimensions. buildPublicUrl() already returned null for an
+        // unknown variant, so a non-null $variant is guaranteed present in the variants map here.
+        $width  = $entry['width'] ?? null;
+        $height = $entry['height'] ?? null;
+        if ($variant !== null && isset($entry['variants'][$variant])) {
+            $width  = $entry['variants'][$variant]['w'] ?? $width;
+            $height = $entry['variants'][$variant]['h'] ?? $height;
+        }
+
         return [
             'url'     => $url,
             'alt'     => $this->localizeMap($entry['alt'] ?? []),
             'caption' => $this->localizeMap($entry['caption'] ?? []),
-            'width'   => $entry['width'] ?? null,
-            'height'  => $entry['height'] ?? null,
+            'width'   => $width,
+            'height'  => $height,
         ];
     }
 
