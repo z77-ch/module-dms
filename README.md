@@ -29,5 +29,3 @@ Don't start a project with `composer require`. Use the
 [z77-skeleton](https://github.com/z77-ch/z77-skeleton) template — **Use this template** →
 `composer install`. It wires all four packages, the installer, and the override structure.
 `composer require z77/module-dms` only adds this module to an **existing** z77 project.
-
-⚠️ In development — not ready for production use.
