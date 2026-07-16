@@ -2,6 +2,8 @@
     "name": "z77/module-dms",
     "description": "Z77 DMS Module | authorized document delivery (OutputController) + drive surface for the document management system.",
     "type": "library",
+    "keywords": ["php", "framework", "dms", "documents", "z77"],
+    "homepage": "https://github.com/z77-ch/z77-framework",
     "license": "MIT",
     "authors": [
         {
@@ -30,8 +32,9 @@
         "z77/kernel": "^1.0"
     },
     "support": {
-        "issues": "https://github.com/z77-ch/module-dms/issues",
-        "source": "https://github.com/z77-ch/module-dms"
+        "issues": "https://github.com/z77-ch/z77-framework/issues",
+        "source": "https://github.com/z77-ch/module-dms",
+        "docs": "https://github.com/z77-ch/z77-framework/tree/main/docs"
     },
     "readme": "README.md"
 }
