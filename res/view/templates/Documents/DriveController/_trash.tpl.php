@@ -37,6 +37,19 @@
             </div>
             <?php endforeach; ?>
         </div>
+        <?php /* Empty the whole trash — irreversible, so the submit hides behind a
+                 JS-free <details> confirm step. Retention-blocked documents survive
+                 the purge loop and stay listed (the flash reports them). */ ?>
+        <details style="margin-top:.8rem">
+            <summary style="cursor:pointer;font-size:.85rem;color:var(--be-danger,#dc2626)">Papierkorb leeren …</summary>
+            <div style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem">
+                <span style="flex:1;font-size:.8rem;color:var(--be-muted,#94a3b8)">Alle Dokumente endgültig löschen — unwiderruflich. Laufende Aufbewahrungsfristen bleiben erhalten.</span>
+                <form data-fetch-post style="margin:0">
+                    <input type="hidden" name="op" value="purgeAll">
+                    <button type="submit" class="be-btn be-btn--danger">Endgültig löschen</button>
+                </form>
+            </div>
+        </details>
         <?php endif; ?>
     </div>
     <div class="be-modal__footer">

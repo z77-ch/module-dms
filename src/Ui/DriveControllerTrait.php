@@ -585,6 +585,151 @@ trait DriveControllerTrait
         return $this->paneRefresh($folderId, null);
     }
 
+    // ── bulk actions (v1: documents only — delete / move) ────────────────────────
+    // The list pane's selection bar collects checked row ids client-side and opens these
+    // modals with `?ids=<id,id,…>` (the modal base URL is server-built, drive.js only
+    // appends the selection). The POSTs carry no per-entity token (n documents), so both
+    // actions are `#[Fetch]` — the global AccessGuard CSRF gate is the authority
+    // (DMS-SEC-001 rule, pattern {@see folderAddAction}). Authorization stays in the
+    // domain: the loop calls the EXISTING gated per-document service methods; a denied
+    // or missing id is counted as skipped, never an error (partial success is reported
+    // in ONE flash).
+
+    /** Cap per bulk request — bounds the ids CSV and the per-request service loop. */
+    private const BULK_MAX = 500;
+
+    /**
+     * The readable documents behind an `ids` CSV (`"33,35,…"` — GET query or POST body),
+     * de-duplicated, capped at {@see BULK_MAX}, each gated through {@see readableDoc}
+     * (RF-4a: an unreadable id is dropped like a miss).
+     *
+     * @return array<int, Document> keyed by id
+     */
+    private function bulkDocs(string $csv): array
+    {
+        $ids = array_filter(array_map('intval', explode(',', $csv)), fn (int $v) => $v > 0);
+        $docs = [];
+        foreach (array_slice(array_values(array_unique($ids)), 0, self::BULK_MAX) as $id) {
+            $doc = $this->readableDoc($id);
+            if ($doc !== null) {
+                $docs[$id] = $doc;
+            }
+        }
+        return $docs;
+    }
+
+    /** "N Dokumente" / "1 Dokument" for the bulk flash/modal texts. */
+    private function bulkLabel(int $n): string
+    {
+        return $n === 1 ? '1 Dokument' : $n . ' Dokumente';
+    }
+
+    /**
+     * Bulk move modal (GET, `?ids=`) + handler (POST). The selection travels as ONE
+     * hidden CSV field (`ids`) — the fetch form serializer collapses repeated hidden
+     * fields, only checkbox groups become arrays. Each move is domain-gated per document
+     * (`manage` on the doc + `write` on the target); denials are skipped and reported.
+     */
+    #[Fetch]
+    protected function bulkMoveAction(): HtmlResponse|FetchResponse
+    {
+        if (DI::getRequest()->isPost()) {
+            $body = DI::getRequest()->getJsonBody();
+            $docs = $this->bulkDocs((string) ($body['ids'] ?? ''));
+            if ($docs === []) {
+                return $this->fetchError('Keine Dokumente ausgewählt.');
+            }
+            $target = (int) ($body['folder_id'] ?? 0) ?: null;
+            if ($target === null || $this->readableFolder($target) === null) {
+                return $this->fetchError('Ziel-Ordner nicht gefunden.');
+            }
+
+            $moved = 0;
+            foreach (array_keys($docs) as $id) {
+                try {
+                    $this->docService()->move($id, $target);
+                    $moved++;
+                } catch (NotFoundException | \InvalidArgumentException | \RuntimeException) {
+                    // denied / vanished / invalid target for THIS doc → skipped, loop on
+                }
+            }
+            $skipped = count($docs) - $moved;
+            $this->messageService->pushFlash(
+                $moved > 0 ? 'success' : 'error',
+                $this->bulkLabel($moved) . ' verschoben' . ($skipped > 0 ? ', ' . $skipped . ' übersprungen' : ''),
+            );
+            return $this->paneRefresh($target, null); // follow the selection into its new folder
+        }
+
+        $docs = $this->bulkDocs((string) DI::getRequest()->getGetParameter('ids'));
+        if ($docs === []) {
+            return $this->fetchError('Keine Dokumente ausgewählt.');
+        }
+        $response = $this->html([
+            'count'         => count($docs),
+            'countLabel'    => $this->bulkLabel(count($docs)),
+            'names'         => array_map(fn (Document $d) => $d->getDisplayName(), array_values($docs)),
+            'idsCsv'        => implode(',', array_keys($docs)),
+            'currentFolder' => $this->folderParam(),
+            'folderOptions' => $this->folderOptions(),
+            'postUrl'       => $this->groupBase() . '/drive/bulk-move',
+            'base'          => $this->groupBase(),
+        ]);
+        $this->layoutManager->addPartials('_bulkMove', 'Documents/DriveController', self::DMS_NS);
+        return $response;
+    }
+
+    /** Bulk delete confirmation modal (GET, `?ids=`). The form posts to {@see bulkRemoveAction}. */
+    #[Fetch, HttpMethod('GET')]
+    protected function bulkConfirmDeleteAction(): HtmlResponse|FetchResponse
+    {
+        $docs = $this->bulkDocs((string) DI::getRequest()->getGetParameter('ids'));
+        if ($docs === []) {
+            return $this->fetchError('Keine Dokumente ausgewählt.');
+        }
+        $response = $this->html([
+            'count'      => count($docs),
+            'countLabel' => $this->bulkLabel(count($docs)),
+            'names'      => array_map(fn (Document $d) => $d->getDisplayName(), array_values($docs)),
+            'idsCsv'     => implode(',', array_keys($docs)),
+            'folderId'   => $this->folderParam(),
+            'removeUrl'  => $this->groupBase() . '/drive/bulk-remove',
+            'base'       => $this->groupBase(),
+        ]);
+        $this->layoutManager->addPartials('_bulkConfirmDelete', 'Documents/DriveController', self::DMS_NS);
+        return $response;
+    }
+
+    /**
+     * Bulk soft-delete handler (POST). Each delete is the existing domain-gated
+     * {@see DocumentService::delete} (manage per document, bytes kept — trash).
+     */
+    #[Fetch, HttpMethod('POST')]
+    protected function bulkRemoveAction(): FetchResponse
+    {
+        $body = DI::getRequest()->getJsonBody();
+        $docs = $this->bulkDocs((string) ($body['ids'] ?? ''));
+        if ($docs === []) {
+            return $this->fetchError('Keine Dokumente ausgewählt.');
+        }
+
+        $deleted = 0;
+        foreach (array_keys($docs) as $id) {
+            try {
+                $this->docService()->delete($id);
+                $deleted++;
+            } catch (NotFoundException | \RuntimeException) {
+                // denied / vanished → skipped, loop on
+            }
+        }
+        $skipped = count($docs) - $deleted;
+        $this->messageService->pushFlash(
+            $deleted > 0 ? 'success' : 'error',
+            $this->bulkLabel($deleted) . ' gelöscht' . ($skipped > 0 ? ', ' . $skipped . ' übersprungen' : ''),
+        );
+        return $this->paneRefresh((int) ($body['folder'] ?? 0) ?: null, null);
+    }
+
     // ── folder actions (new / rename / move / delete) ────────────────────────────
     // The controller keeps the surface concerns (CSRF, modal render, flash, pane refresh);
     // the folder domain logic (slug uniqueness, delete/cycle guards, materialization) lives
@@ -799,28 +944,57 @@ trait DriveControllerTrait
      * selection travels in the trash URL (`?folder=&doc=`, server-built on the
      * breadcrumb pane — same mechanism as the ⋮ action hub). Purge respects
      * `retentionUntil`; restore needs the original folder to still exist.
+     *
+     * `#[Fetch]` (both verbs): the panel is opened with `fetch.get` and its forms post
+     * with `data-fetch-post`. The row ops (restore/purge) keep their per-entity token;
+     * the `purgeAll` op ("Papierkorb leeren", 2026-07-16) spans n documents and carries
+     * none — requiring Fetch mode makes the global AccessGuard CSRF gate the authority
+     * (DMS-SEC-001 rule, pattern {@see folderAddAction}).
      */
+    #[Fetch]
     protected function trashAction(): HtmlResponse|FetchResponse
     {
         $mutated = false;
         if (DI::getRequest()->isPost()) {
             $body = DI::getRequest()->getJsonBody();
-            $id   = (int) ($body['id'] ?? 0);
-            if (!DI::getCsrfService()->validateEntityToken(trim($body['entity_csrf'] ?? ''), 'document', $id)) {
-                return $this->fetchError('Invalid token');
-            }
-            try {
-                if (($body['op'] ?? '') === 'restore') {
-                    $this->docService()->restore($id);
-                    $this->messageService->pushFlash('success', 'Dokument wiederhergestellt');
-                    $mutated = true;
-                } elseif (($body['op'] ?? '') === 'purge') {
-                    $this->docService()->purge($id);
-                    $this->messageService->pushFlash('success', 'Dokument endgültig gelöscht');
-                    $mutated = true;
+            if (($body['op'] ?? '') === 'purgeAll') {
+                // Empty the whole trash: loop the principal-scoped listDeleted() through
+                // the EXISTING gated purge() (manage + retention per document, bulk rule).
+                // A retention-blocked document is skipped and stays in the trash.
+                $purged  = 0;
+                $skipped = 0;
+                foreach ($this->docService()->listDeleted() as $doc) {
+                    try {
+                        $this->docService()->purge((int) $doc->getId());
+                        $purged++;
+                    } catch (NotFoundException | \RuntimeException) {
+                        $skipped++;
+                    }
                 }
-            } catch (NotFoundException | \RuntimeException $e) {
-                $this->messageService->pushFlash('error', $e->getMessage());
+                $this->messageService->pushFlash(
+                    $purged > 0 || $skipped === 0 ? 'success' : 'error',
+                    $this->bulkLabel($purged) . ' endgültig gelöscht'
+                    . ($skipped > 0 ? ', ' . $skipped . ' übersprungen (Aufbewahrungsfrist)' : ''),
+                );
+                $mutated = $purged > 0;
+            } else {
+                $id = (int) ($body['id'] ?? 0);
+                if (!DI::getCsrfService()->validateEntityToken(trim($body['entity_csrf'] ?? ''), 'document', $id)) {
+                    return $this->fetchError('Invalid token');
+                }
+                try {
+                    if (($body['op'] ?? '') === 'restore') {
+                        $this->docService()->restore($id);
+                        $this->messageService->pushFlash('success', 'Dokument wiederhergestellt');
+                        $mutated = true;
+                    } elseif (($body['op'] ?? '') === 'purge') {
+                        $this->docService()->purge($id);
+                        $this->messageService->pushFlash('success', 'Dokument endgültig gelöscht');
+                        $mutated = true;
+                    }
+                } catch (NotFoundException | \RuntimeException $e) {
+                    $this->messageService->pushFlash('error', $e->getMessage());
+                }
             }
         }
 

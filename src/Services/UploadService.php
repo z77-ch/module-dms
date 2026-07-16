@@ -93,7 +93,9 @@ final class UploadService
     /**
      * Whether a file of $size bytes can be loaded whole into the remaining memory budget.
      * Needs ~1.2× the size (the byte string plus PHP/framework overhead); an unlimited
-     * `memory_limit` (-1) always fits.
+     * `memory_limit` (-1) always fits. Measured from USED bytes, not reserved — see
+     * {@see GdImageProcessor::fitsMemory} (DMS-MEM-001): `memory_get_usage(true)` counts
+     * ZendMM's reusable cached chunks and yields false negatives in a persistent worker.
      */
     private function fitsMemory(int $size): bool
     {
@@ -102,7 +104,7 @@ final class UploadService
             return true; // unlimited
         }
         $needed    = $size + intdiv($size, 5); // 1.2×
-        $available = $limit - memory_get_usage(true);
+        $available = $limit - memory_get_usage(false);
 
         return $needed <= $available;
     }

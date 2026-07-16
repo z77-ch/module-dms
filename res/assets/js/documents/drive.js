@@ -92,4 +92,74 @@
         e.preventDefault();
         _Z77.core.fetch.get(link.getAttribute('data-pane'));
     });
+
+    /* ── bulk selection (v1: documents — delete / move) ─────────────────────
+     *
+     * The selection surface is server-rendered checkboxes; the action bar's
+     * APPEARANCE is pure CSS (`:has()`, see _filelist.scss). This block adds only
+     * what CSS cannot: shift-click range selection, the live counter, all/none,
+     * and opening the bulk modal — by appending the checked ids to the SERVER-BUILT
+     * modal base URL on the list container (the client never constructs URL
+     * structure, only the selection parameter — same level as a form field).
+     *
+     * Delegated on `document` like the pane handler above: the list pane is
+     * replaced on every refresh, which also naturally clears the selection.
+     */
+    var lastChecked = null; // shift-range anchor; stale after a pane swap (indexOf miss → no range)
+
+    function bulkBoxes(list) {
+        return Array.prototype.slice.call(list.querySelectorAll('[data-bulk-check]'));
+    }
+
+    function bulkIds(list) {
+        return bulkBoxes(list).filter(function (cb) { return cb.checked; })
+            .map(function (cb) { return cb.value; });
+    }
+
+    function bulkCount(list) {
+        var el = list.querySelector('[data-bulk-count]');
+        if (el) { el.textContent = bulkIds(list).length + ' ausgewählt'; }
+    }
+
+    document.addEventListener('click', function (e) {
+        // Row checkbox: shift-range + counter. (Keyboard activation fires click too.)
+        var cb = e.target.closest('[data-bulk-check]');
+        if (cb && cb.closest('[data-drive-scope]')) {
+            var list  = cb.closest('.dms-filelist');
+            var boxes = bulkBoxes(list);
+            var a     = boxes.indexOf(lastChecked);
+            if (e.shiftKey && a !== -1) {
+                var b = boxes.indexOf(cb);
+                boxes.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(function (x) {
+                    x.checked = cb.checked;
+                });
+            }
+            lastChecked = cb;
+            bulkCount(list);
+            return;
+        }
+
+        // All / none.
+        var toggle = e.target.closest('[data-bulk-all], [data-bulk-none]');
+        if (toggle && toggle.closest('[data-drive-scope]')) {
+            var tList   = toggle.closest('.dms-filelist');
+            var checked = toggle.hasAttribute('data-bulk-all');
+            bulkBoxes(tList).forEach(function (x) { x.checked = checked; });
+            bulkCount(tList);
+            return;
+        }
+
+        // Bulk action button: open the modal for the current selection.
+        var btn = e.target.closest('[data-bulk-action]');
+        if (btn && btn.closest('[data-drive-scope]') && window._Z77 && _Z77.core && _Z77.core.fetch) {
+            var bList = btn.closest('.dms-filelist');
+            var ids   = bulkIds(bList);
+            var url   = bList.getAttribute(btn.getAttribute('data-bulk-action') === 'move'
+                ? 'data-bulk-move-url' : 'data-bulk-delete-url');
+            if (ids.length && url) {
+                e.preventDefault();
+                _Z77.core.fetch.get(url + '&ids=' + ids.join(','));
+            }
+        }
+    });
 }());

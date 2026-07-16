@@ -13,6 +13,57 @@
     font-size:  var(--dms-font-size-sm);
 }
 
+/* ── Bulk selection (v1: delete / move) ──
+   Row checkboxes are quiet by default (hover-revealed); once ONE is checked the whole
+   selection surface stays visible and the action bar appears — both driven purely by
+   `:has()`, no JS (conventions.md#javascript). On touch (no hover) the checkboxes are
+   always shown. */
+.dms-filelist-bulkbar {
+    display:       none;
+    position:      sticky;
+    top:           0;
+    z-index:       var(--dms-z-sticky);
+    align-items:   center;
+    gap:           var(--dms-space-2);
+    padding:       var(--dms-space-2) var(--dms-space-4);
+    background:    var(--dms-accent-soft);
+    border-bottom: 1px solid var(--dms-line);
+}
+.dms-filelist:has(.dms-file__select:checked) .dms-filelist-bulkbar { display: flex; }
+
+.dms-filelist-bulkbar__count {
+    font-size:   var(--dms-font-size-sm);
+    font-weight: var(--dms-font-weight-medium);
+    color:       var(--dms-text);
+}
+.dms-filelist-bulkbar__spacer { flex: 1; }
+
+.dms-file__select {
+    /* The backend host's normalize strips `appearance` from ALL form controls
+       (module-backend _normalize.scss) — without restoring it the native checkbox
+       paints nothing at all (same trap as the backend selects, _forms.scss). */
+    appearance:   auto;
+    flex-shrink:  0;
+    width:        1rem;
+    height:       1rem;
+    margin:       0;
+    accent-color: var(--dms-accent);
+    cursor:       pointer;
+    opacity:      0;
+    transition:   opacity var(--dms-transition-fast);
+}
+.dms-file:hover .dms-file__select,
+.dms-file__select:checked,
+.dms-file__select:focus-visible,
+.dms-filelist:has(.dms-file__select:checked) .dms-file__select { opacity: 1; }
+@media (hover: none) {
+    .dms-file__select { opacity: 1; }
+}
+
+/* While a selection exists, shift-click extends the range — suppress the text
+   selection the browser would otherwise paint between the two rows. */
+.dms-filelist:has(.dms-file__select:checked) .dms-file { user-select: none; }
+
 /* ── One document row ── */
 .dms-file {
     display:       flex;

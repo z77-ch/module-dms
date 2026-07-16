@@ -121,6 +121,12 @@ final class GdImageProcessor implements ImageProcessor
      * the image). Compared against the remaining `memory_limit` with a 20% safety
      * margin; an unlimited limit (-1) always fits.
      *
+     * The budget is measured from USED bytes (`memory_get_usage(false)`), not reserved:
+     * `(true)` includes ZendMM's freed-but-cached chunks, which stay elevated after a
+     * prior variant generation in the same worker (php -S dev, LSAPI on cyon) although
+     * the allocator reuses them — a `(true)`-based check refuses images that process
+     * fine (DMS-MEM-001, review 2026-07-16).
+     *
      * @param list<VariantSpec> $specs
      */
     private function fitsMemory(int $sw, int $sh, array $specs): bool
@@ -137,7 +143,7 @@ final class GdImageProcessor implements ImageProcessor
         }
 
         $needed    = ($sw * $sh + 2 * $largestDest) * 5;
-        $available = $limit - memory_get_usage(true);
+        $available = $limit - memory_get_usage(false);
 
         return $needed <= (int) ($available * 0.8);
     }

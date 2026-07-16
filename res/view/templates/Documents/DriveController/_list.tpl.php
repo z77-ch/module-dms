@@ -22,9 +22,24 @@ $ctx = '&folder=' . ($selectedFolderId ?? '') . '&doc=' . ($selectedDoc ?? '');
         ? 'Wähle links einen Ordner — oder lege oben einen an. Dokumente liegen immer in einem Ordner.'
         : 'Keine Dokumente in diesem Ordner. Über «Hochladen» eine Datei ablegen.' ?></div>
   <?php else: ?>
-  <div class="dms-filelist">
+  <?php /* Bulk selection (v1: documents only, delete + move). Modal URLs are server-built;
+           drive.js only appends the checked ids (`&ids=1,2,…`). The bar itself is revealed
+           by CSS `:has()` as soon as one row checkbox is checked — no JS for the reveal. */ ?>
+  <div class="dms-filelist"
+       data-bulk-delete-url="<?= e($base . '/drive/bulk-confirm-delete?folder=' . ($selectedFolderId ?? '')) ?>"
+       data-bulk-move-url="<?= e($base . '/drive/bulk-move?folder=' . ($selectedFolderId ?? '')) ?>">
+    <div class="dms-filelist-bulkbar">
+      <span class="dms-filelist-bulkbar__count" data-bulk-count></span>
+      <button type="button" class="dms-btn dms-btn--ghost" data-bulk-all>Alle</button>
+      <button type="button" class="dms-btn dms-btn--ghost" data-bulk-none>Keine</button>
+      <span class="dms-filelist-bulkbar__spacer"></span>
+      <button type="button" class="dms-btn dms-btn--muted" data-bulk-action="move">Verschieben</button>
+      <button type="button" class="dms-btn dms-btn--muted" data-bulk-action="delete">Löschen</button>
+    </div>
     <?php foreach ($files as $f): ?>
     <div class="dms-file<?= $f['isActive'] ? ' dms-file--active' : '' ?><?= $f['active'] ? '' : ' dms-file--inactive' ?>">
+      <input type="checkbox" class="dms-file__select" data-bulk-check
+             value="<?= (int) $f['id'] ?>" aria-label="«<?= e($f['displayName']) ?>» auswählen">
       <span class="dms-file__thumb dms-file__thumb--<?= e($f['thumbClass']) ?>">
         <?php if ($f['thumbUrl'] !== null): ?>
           <img src="<?= e($f['thumbUrl']) ?>" alt="" width="40" height="40">
