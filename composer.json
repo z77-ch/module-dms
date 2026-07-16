@@ -26,6 +26,7 @@
     },
     "require": {
         "php": ">=8.2",
+        "ext-gd": "*",
         "z77/kernel": "^1.0"
     },
     "support": {
