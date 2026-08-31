@@ -9,6 +9,9 @@
 @use 'base/base';
 @use 'components/icon';
 @use 'components/button';
+// Token binding for the shared `z77-split` primitive the Drive lays out with. The primitive
+// itself is compiled into the HOST bundle (it is not a dms component) — see css-dms.md.
+@use 'components/split-host';
 @use 'components/drive';
 @use 'components/tree';
 @use 'components/filelist';

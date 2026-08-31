@@ -29,18 +29,20 @@ $trashQuery = http_build_query(array_filter([
     'doc'    => $selectedDoc ?? null,
 ]));
 $trashUrl = $base . '/drive/trash' . ($trashQuery !== '' ? '?' . $trashQuery : '');
+// The folder tools (edit/move/delete) moved OUT of this pane into the shell's hc2
+// toolbar (ADR-033: the crumb line carries position and state, the toolbar operates).
+// Their server-built URLs travel as data attributes here — empty when no folder is
+// selected — so the static toolbar buttons stay current across pane swaps, exactly
+// like data-add-url does for the upload button.
+$folderEditUrl   = $selectedFolderId !== null ? $base . '/drive/folder-edit?id=' . (int)$selectedFolderId : '';
+$folderMoveUrl   = $selectedFolderId !== null ? $base . '/drive/folder-move?id=' . (int)$selectedFolderId : '';
+$folderDeleteUrl = $selectedFolderId !== null ? $base . '/drive/folder-confirm-delete?id=' . (int)$selectedFolderId : '';
 ?>
-<div class="dms-drive__breadcrumb" data-add-url="<?= e($addUrl) ?>" data-folder-add-url="<?= e($folderAddUrl) ?>" data-trash-url="<?= e($trashUrl) ?>">
+<div class="dms-drive__breadcrumb" data-add-url="<?= e($addUrl) ?>" data-folder-add-url="<?= e($folderAddUrl) ?>" data-trash-url="<?= e($trashUrl) ?>"
+     data-folder-edit-url="<?= e($folderEditUrl) ?>" data-folder-move-url="<?= e($folderMoveUrl) ?>" data-folder-delete-url="<?= e($folderDeleteUrl) ?>">
   <a class="dms-drive__crumb<?= $rootActive ? ' dms-drive__crumb--active' : '' ?>" href="<?= e($listUrl($rootFolderId)) ?>" data-pane="<?= e($paneUrl($rootFolderId)) ?>"><?= e($rootLabel) ?></a>
   <?php foreach ($crumbs as $c): ?>
     <span class="dms-drive__crumb-sep">›</span>
     <a class="dms-drive__crumb dms-drive__crumb--active" href="<?= e($listUrl($c['id'])) ?>" data-pane="<?= e($paneUrl($c['id'])) ?>"><?= e($c['name']) ?></a>
   <?php endforeach; ?>
-  <?php if ($selectedFolderId !== null): ?>
-  <span class="dms-drive__crumb-actions" style="margin-left:auto;display:inline-flex;gap:.25rem">
-    <button type="button" class="dms-iconbtn" title="Ordner bearbeiten" data-modal="<?= $base ?>/drive/folder-edit?id=<?= (int) $selectedFolderId ?>"><svg class="dms-icon"><use href="#i-edit"/></svg></button>
-    <button type="button" class="dms-iconbtn" title="Ordner verschieben" data-modal="<?= $base ?>/drive/folder-move?id=<?= (int) $selectedFolderId ?>"><svg class="dms-icon"><use href="#i-move"/></svg></button>
-    <button type="button" class="dms-iconbtn" title="Ordner löschen"     data-modal="<?= $base ?>/drive/folder-confirm-delete?id=<?= (int) $selectedFolderId ?>"><svg class="dms-icon"><use href="#i-trash"/></svg></button>
-  </span>
-  <?php endif; ?>
 </div>

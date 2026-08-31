@@ -1,0 +1,16 @@
+// Host binding: the `.dms` fragment → the shared `z77-split` primitive (ADR-018 rule 7).
+//
+// The Drive's panes are laid out by `z77-split`, which ships neutral defaults. Inside the
+// fragment the divider must follow the DMS tokens, not the host's — that is what keeps the
+// Drive looking identical in a backend, frontend or member page.
+//
+// `.dms .z77-split` is (0,2,0), the same as the backend's own `.be .z77-split`, and `dms.css`
+// loads AFTER the host bundle — so this binding wins wherever the Drive is embedded. That is
+// intended: the innermost area owns its own look.
+
+.dms .z77-split {
+    --z77-split-line:          var(--dms-line);
+    --z77-split-handle:        var(--dms-line);
+    --z77-split-handle-active: var(--dms-accent);
+    --z77-split-backdrop:      color-mix(in srgb, var(--dms-text) 34%, transparent);
+}

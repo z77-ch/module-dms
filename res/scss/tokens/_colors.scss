@@ -43,37 +43,22 @@
     --dms-info-bg:      #e0f0fb;
 }
 
-/* Werkbank dark — mirrors the backend dark theme. The dms is currently embedded ONLY in
-   the backend host, so its dark set keys off the host's `[data-be-theme="dark"]` on
-   `<html class="be">`. This stays a SEPARATE `--dms-*` set (own copy, overridable); a
-   different host would override `.dms` per ADR-018 instead of relying on this selector. */
-[data-be-theme="dark"] .dms {
-    --dms-bg:           #14161f;
-    --dms-surface:      #1c1f2c;
-    --dms-surface-alt:  #262a3c;
-    --dms-elevated:     #24273a;
+/* No dark block here — dark mode is the HOST's theme, not the fragment's.
+   Until 2026-08-08 this file carried a `[data-be-theme="dark"] .dms { … }` set: the
+   fragment reached into the backend's theme attribute to theme itself. That was flagged
+   as deliberate coupling to revisit "if a second host embeds the fragment" — the frontend
+   embedding (customer invoices / accounting documents) is that trigger.
 
-    --dms-text:         #e7e8f5;
-    --dms-text-soft:    #b8bcd0;
-    --dms-muted:        #8a8ea8;
-    --dms-text-inverse: #ffffff;
+   Two reasons it had to go, not just one:
+   1. It only worked for one host. A frontend host has no `[data-be-theme]`, so the
+      fragment would have stayed light there forever.
+   2. It BLOCKED the correct fix. At (0,2,0) it tied with the host binding
+      `.be .dms` and, loading later (dms.css is added per action, after base.css), won —
+      so a backend binding could not have taken effect in dark mode at all.
 
-    --dms-line:         #282b3e;
-    --dms-line-strong:  #3a3e52;
-
-    --dms-accent:       #9698f5;
-    --dms-accent-dark:  #7f80ee;
-    --dms-accent-light: #b4b5f9;
-    --dms-accent-soft:  #24243f;
-    --dms-on-accent:    #ffffff;
-    --dms-focus-ring:   rgba(150, 152, 245, 0.40);
-
-    --dms-success:      #4ec98a;
-    --dms-success-bg:   #142a1e;
-    --dms-danger:       #f06b6b;
-    --dms-danger-bg:    #2c1616;
-    --dms-warning:      #dbaa4e;
-    --dms-warning-bg:   #2a2011;
-    --dms-info:         #4aa3d4;
-    --dms-info-bg:      #0f2530;
-}
+   The light values above are the fragment's complete standalone default (ADR-018 rule 1).
+   A host that wants its own palette/theme binds them per ADR-018 rule 4 — the backend
+   does so in `module-backend/res/scss/components/_dms-host.scss`, which maps every token
+   here onto `--be-*` and therefore covers all six palettes AND light/dark in one place.
+   A host that binds nothing gets these neutral defaults, never the host's values by
+   accident. See css-dms.md DMS-HOST-BIND-001. */

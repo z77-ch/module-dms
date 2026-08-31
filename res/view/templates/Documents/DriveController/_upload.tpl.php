@@ -16,6 +16,7 @@
  * @var list<array{id:int, label:string}> $folderOptions
  * @var int      $maxBytes       transport cap (bytes) — all files, drives the hint
  * @var int      $maxImageBytes  memory cap (bytes) — images only
+ * @var string|null $targetDelivery effective delivery of the pre-selected folder
  */
 $maxMb = (int) floor($maxBytes / (1024 * 1024));
 ?>
@@ -27,6 +28,14 @@ $maxMb = (int) floor($maxBytes / (1024 * 1024));
         <h2 class="be-modal__title">Dateien hochladen</h2>
     </div>
     <div class="be-modal__body">
+        <?php if ($targetDelivery === 'public'): ?>
+        <?php // The consequence, stated before the file is chosen: inside a public
+              // partition every upload is world-readable via /media (ADR-017 inheritance). ?>
+        <p style="font-size:.78rem;color:#f59e0b;margin:0 0 .75rem">
+            <strong>Zielordner liefert öffentlich aus.</strong> Was hier landet, ist ohne
+            Anmeldung über <code>/media</code> erreichbar — auch für Suchmaschinen.
+        </p>
+        <?php endif; ?>
         <div class="be-form__grid" style="grid-template-columns:1fr">
             <div class="be-form__field" data-z77-field-wrapper>
                 <label>Datei(en) — max. <?= $maxMb ?> MB pro Datei</label>

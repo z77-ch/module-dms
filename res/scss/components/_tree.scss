@@ -3,7 +3,25 @@
    middle list. */
 .dms-tree { font-size: var(--dms-font-size-sm); }
 
-.dms-tree__node { }
+/* `position: relative` anchors the visually hidden disclosure checkbox below to ITS node.
+   Without it the checkbox is placed against a far-away ancestor, and focusing it by keyboard
+   makes the pane jump to that position. */
+.dms-tree__node { position: relative; }
+
+/* Expand/collapse state. A checkbox, not `<details>/<summary>`: a summary is the click target
+   for everything inside it, so it would swallow the row's own controls — the name link and the
+   `⋮` menu. `.be-list` v2 rejected it for the same reason. Visually hidden but focusable, so
+   the caret is reachable by keyboard; `pointer-events: none` because the label is the target. */
+.dms-tree__switch {
+    position:       absolute;
+    top:            0;
+    left:           0;
+    width:          1px;
+    height:         1px;
+    margin:         0;
+    opacity:        0;
+    pointer-events: none;
+}
 
 .dms-tree__row {
     display:       flex;
@@ -26,15 +44,27 @@
     font-weight: var(--dms-font-weight-medium);
 }
 
-/* Expand/collapse caret — rotates when the node is open. */
+/* Expand/collapse caret — the disclosure's label, so it must be comfortably hittable. It
+   stretches to the row height rather than being a bare 16px glyph. */
 .dms-tree__toggle {
-    display:     flex;
-    align-items: center;
-    width:       1rem;
-    color:       var(--dms-muted);
-    transition:  transform var(--dms-transition-fast);
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    align-self:      stretch;
+    width:           1rem;
+    flex-shrink:     0;
+    color:           var(--dms-muted);
+    cursor:          pointer;
 }
-.dms-tree__node--has-children.is-open > .dms-tree__row .dms-tree__toggle { transform: rotate(90deg); }
+/* Rotate the GLYPH, not the label — the hit area must not move while the caret turns. */
+.dms-tree__toggle .dms-icon { transition: transform var(--dms-transition-fast); }
+.dms-tree__switch:checked ~ .dms-tree__row .dms-tree__toggle .dms-icon { transform: rotate(90deg); }
+.dms-tree__toggle:hover { color: var(--dms-accent); }
+.dms-tree__switch:focus-visible ~ .dms-tree__row .dms-tree__toggle {
+    outline:        2px solid var(--dms-focus-ring);
+    outline-offset: -2px;
+    border-radius:  var(--dms-radius-sm);
+}
 .dms-tree__node:not(.dms-tree__node--has-children) > .dms-tree__row .dms-tree__toggle { visibility: hidden; }
 
 .dms-tree__icon { color: var(--dms-muted); }
@@ -59,9 +89,9 @@
     font-family: var(--dms-font-family-mono);
 }
 
-/* Children container — hidden until the node is open. */
+/* Children container — hidden until the node's disclosure is checked. */
 .dms-tree__children { display: none; }
-.dms-tree__node--has-children.is-open > .dms-tree__children { display: block; }
+.dms-tree__switch:checked ~ .dms-tree__children { display: block; }
 
 /* Inactive folder (deliveryMode/active = off) — dimmed + struck. */
 .dms-tree__node--inactive > .dms-tree__row .dms-tree__name { opacity: 0.5; text-decoration: line-through; }

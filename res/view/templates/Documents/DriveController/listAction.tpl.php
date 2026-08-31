@@ -42,8 +42,23 @@ $ns = 'Documents/DriveController/';
          class + server-built data-urls there, so DriveControllerTrait::panes still refreshes it in place.
          `data-drive-scope` marks the fragment (tree/list/preview links + document actions) for drive.js;
          the header slots carry the same marker. */ ?>
-<div class="dms">
-  <div class="dms-drive" data-drive-scope>
+<?php /* Layout comes from the SHARED `z77-split` primitive (kernel/shared) as of 2026-08-08;
+         `.dms-drive` keeps only the frame (border, radius, background). Two classes per pane:
+         `.dms-drive__*` for the look, `.z77-split__pane` for the geometry.
+         The pane classes MUST live in the partials, not here — `panes()` replaces those roots
+         via `replace-html` (outerHTML), so a class added on this page only would be gone after
+         the first folder click.
+         Handle count = panes − 1; the pane order (pane, handle, pane, handle, pane) is what the
+         `nth-child` width rules in `_split.scss` read, so do not insert other elements between
+         them. The backdrop belongs to the narrow-screen overlay of the preview pane. */ ?>
+<?php /* `dms--fill`: the Drive is a full-height workspace, so the fragment must pass the host's
+         remaining height down instead of growing with the file list. Without it `.dms-drive`'s
+         `height: 100%` has no definite parent to resolve against, the panes grow, and the shell
+         column scrolls instead of each pane. Opt-in — a `.dms` fragment embedded as a block in
+         a page keeps its content height. */ ?>
+<div class="dms dms--fill">
+  <div class="dms-drive z77-split" data-drive-scope data-z77-split-root
+       style="--z77-split-1: 16rem; --z77-split-3: 22rem">
 
     <?= $this->partial($ns . '_tree', [
         'roots'            => $roots,
@@ -54,9 +69,17 @@ $ns = 'Documents/DriveController/';
         'base'             => $base,
     ], $tplNs) ?>
 
+    <span class="z77-split__handle" title="Breite ziehen"
+          data-z77-split="--z77-split-1" data-z77-split-min="180" data-z77-split-max="480"></span>
+
     <?= $this->partial($ns . '_list', ['files' => $files, 'selectedFolderId' => $selectedFolderId, 'selectedDoc' => $selectedDoc, 'base' => $base], $tplNs) ?>
 
+    <span class="z77-split__handle" title="Breite ziehen"
+          data-z77-split="--z77-split-3" data-z77-split-min="220" data-z77-split-max="560"></span>
+
     <?= $this->partial($ns . '_preview', ['preview' => $preview, 'base' => $base], $tplNs) ?>
+
+    <div class="z77-split__backdrop" data-z77-split-close></div>
 
   </div>
 </div>

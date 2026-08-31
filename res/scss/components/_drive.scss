@@ -1,11 +1,9 @@
-/* `.dms-drive` — the three-pane Drive shell: left folder tree, middle document list,
-   right preview. A fragment embedded in a host page; it fills its host container and
-   manages its own internal scrolling per pane (the host owns the page scroll). */
+/* `.dms-drive` — the FRAME of the three-pane Drive. The LAYOUT (pane widths, drag handles,
+   narrow-screen overlay) moved to the shared `z77-split` primitive 2026-08-08; the element
+   carries both classes. Do NOT reintroduce `display: grid` here — `dms.css` loads after the
+   host bundle, so a `display` declaration on `.dms-drive` would beat `.z77-split`'s `flex` at
+   equal specificity and silently break the panes. */
 .dms-drive {
-    display:               grid;
-    grid-template-columns: minmax(180px, 16rem) minmax(0, 1fr) minmax(220px, 22rem);
-    grid-template-rows:    1fr;
-    grid-template-areas:   "tree list preview";
     height:        100%;
     min-height:    24rem;
     background:    var(--dms-bg);
@@ -33,31 +31,47 @@
 .dms-drive__crumb--active { color: var(--dms-text); font-weight: var(--dms-font-weight-medium); }
 .dms-drive__crumb-sep { color: var(--dms-line-strong); }
 
-/* ── Panes ── */
-.dms-drive__tree {
-    grid-area:    tree;
-    overflow-y:   auto;
-    padding:      var(--dms-space-2);
-    border-right: 1px solid var(--dms-line);
-    background:   var(--dms-surface);
-}
-.dms-drive__list {
-    grid-area:  list;
-    overflow-y: auto;
-    background: var(--dms-bg);
-}
-.dms-drive__preview {
-    grid-area:    preview;
-    overflow-y:   auto;
-    border-left:  1px solid var(--dms-line);
-    background:   var(--dms-surface);
+/* ── Panes ──
+   Look only. Width, scrolling and the divider line come from `.z77-split__pane`, which every
+   pane partial also carries. The old `grid-area` / `overflow-y` / `border` declarations were
+   removed with the layout — a second border here would double the split's divider. */
+.dms-drive__tree    { padding: var(--dms-space-2); background: var(--dms-surface); }
+.dms-drive__list    { background: var(--dms-bg); }
+.dms-drive__preview { background: var(--dms-surface); }
+
+/* Trigger for the folder overlay (narrow Drive). Placement + look only — WHETHER it shows is
+   the primitive's call via `.z77-split__opener`, which outranks `.dms-btn`'s own `display`.
+   `align-self` keeps it from stretching across the pane, which is a flex column. */
+.dms-drive__nav-open {
+    align-self:  flex-start;
+    flex-shrink: 0;
+    margin:      var(--dms-space-2);
 }
 
-/* ── Narrow container: drop the preview pane (kept reachable via row click → modal in JS). ── */
-@media (max-width: 60rem) {
-    .dms-drive {
-        grid-template-columns: minmax(160px, 14rem) minmax(0, 1fr);
-        grid-template-areas:   "tree list";
+/* Close button — only meaningful while the preview is an OVERLAY (narrow Drive). On a wide
+   Drive the pane is a plain column and there is nothing to close. */
+.dms-drive__preview-close { display: none; }
+@container (max-width: 60rem) {
+    .dms-drive__preview-close {
+        position:      absolute;
+        top:           var(--dms-space-2);
+        right:         var(--dms-space-2);
+        z-index:       1;
+        display:       grid;
+        place-items:   center;
+        width:         1.9rem;
+        height:        1.9rem;
+        border-radius: var(--dms-radius-md);
+        background:    var(--dms-surface-alt);
+        color:         var(--dms-muted);
+        cursor:        pointer;
     }
-    .dms-drive__preview { display: none; }
+    .dms-drive__preview-close:hover { color: var(--dms-text); }
 }
+
+/* The former `@media (max-width: 60rem) { .dms-drive__preview { display: none } }` is GONE.
+   It hid the preview with no way back — its code comment claimed a JS modal fallback that
+   `drive.js` never contained (DMS-PREVIEW-NARROW-001). The pane is now
+   `.z77-split__pane--detail`: it slides in as an overlay, opened by a file row and closed by
+   the backdrop, the ✕ or Esc. A container query, not `@media` — the Drive's own width is what
+   matters, and its panes are drag-resizable. */

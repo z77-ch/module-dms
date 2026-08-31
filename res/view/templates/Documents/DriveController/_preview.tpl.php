@@ -7,7 +7,10 @@
  * @var array|null $preview  selected document preview view-model (null = empty state)
  */
 ?>
-<aside class="dms-drive__preview">
+<aside class="dms-drive__preview z77-split__pane z77-split__pane--detail">
+  <?php /* Only reachable — and only visible — while the pane is an overlay (narrow Drive).
+           CSS hides it on a wide Drive, where the pane is simply a column. */ ?>
+  <button type="button" class="dms-drive__preview-close" data-z77-split-close aria-label="Vorschau schliessen">✕</button>
   <div class="dms-preview">
     <?php if ($preview === null): ?>
       <div class="dms-preview__empty">

@@ -71,6 +71,24 @@
             return;
         }
 
+        // Folder tools (edit / move / delete): static hc2 toolbar buttons (ADR-033 —
+        // they used to sit inside the breadcrumb pane). Same mechanism again: the
+        // server-built URL lives on the refreshed pane; an empty URL means no folder
+        // is selected, and syncFolderTools() has hidden the button already.
+        var folderTool = e.target.closest('[data-drive-folder-edit],[data-drive-folder-move],[data-drive-folder-delete]');
+        if (folderTool && folderTool.closest('[data-drive-scope]')) {
+            var bcx  = document.querySelector('.dms-drive__breadcrumb');
+            var attr = folderTool.hasAttribute('data-drive-folder-edit') ? 'data-folder-edit-url'
+                     : folderTool.hasAttribute('data-drive-folder-move') ? 'data-folder-move-url'
+                     : 'data-folder-delete-url';
+            var xurl = bcx && bcx.getAttribute(attr);
+            if (xurl) {
+                e.preventDefault();
+                _Z77.core.fetch.get(xurl);
+            }
+            return;
+        }
+
         // Document action (rename/move/delete): opens the modal at the server-built URL.
         // Delegated because these buttons live in the preview pane, which is replaced on
         // every pane refresh (so per-element wiring would be lost). The modal's own form
@@ -92,6 +110,33 @@
         e.preventDefault();
         _Z77.core.fetch.get(link.getAttribute('data-pane'));
     });
+
+    /* ── folder-tool visibility ─────────────────────────────────────────────
+     *
+     * The three folder tools are STATIC shell buttons, but whether there is a
+     * folder to act on changes with every pane swap. The truth sits on the
+     * refreshed breadcrumb pane (empty data URL = nothing selected); this only
+     * mirrors it onto the buttons' `hidden`. A MutationObserver instead of a
+     * hook into the fetch pipeline: the pane is replaced by generic
+     * `replace-html` commands that know nothing about the Drive.
+     */
+    function syncFolderTools() {
+        var bc = document.querySelector('.dms-drive__breadcrumb');
+        [['data-drive-folder-edit', 'data-folder-edit-url'],
+         ['data-drive-folder-move', 'data-folder-move-url'],
+         ['data-drive-folder-delete', 'data-folder-delete-url']].forEach(function (pair) {
+            var button = document.querySelector('[' + pair[0] + ']');
+            if (button) {
+                button.hidden = !(bc && bc.getAttribute(pair[1]));
+            }
+        });
+    }
+
+    if (document.querySelector('[data-drive-folder-edit]')) {
+        new MutationObserver(syncFolderTools)
+            .observe(document.body, { childList: true, subtree: true });
+        syncFolderTools();
+    }
 
     /* ── bulk selection (v1: documents — delete / move) ─────────────────────
      *

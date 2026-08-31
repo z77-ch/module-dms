@@ -22,7 +22,14 @@ final class Principal
 
     public static function fromAuthUser(AuthUser $user): self
     {
-        return new self($user->getId(), $user->getRoles());
+        // User-ACEs and folder/document ownership are BACKEND concepts: their
+        // ids point into backendUsers.json. A member-realm identity (customer,
+        // string account id — a different id space) must never match them, so
+        // it enters the policy as "not authenticated" and acts through its
+        // role grants only.
+        $userId = $user->isBackendRealm() && is_int($user->getId()) ? $user->getId() : 0;
+
+        return new self($userId, $user->getRoles());
     }
 
     /**

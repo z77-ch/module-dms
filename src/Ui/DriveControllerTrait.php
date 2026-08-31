@@ -232,12 +232,22 @@ trait DriveControllerTrait
      */
     protected function addAction(): HtmlResponse
     {
+        // Effective delivery of the PRE-SELECTED target: a folder inside a `public`
+        // partition inherits `public`, so the file is world-readable the moment it lands
+        // — the one consequence the upload dialog never stated (DMS-DELIVERY-VIS-001).
+        $target         = $this->folderParam();
+        $targetFolder   = $target !== null ? $this->readableFolder($target) : null;
+        $targetDelivery = $targetFolder !== null
+            ? $this->docService()->effectiveFolderDeliveryMode($targetFolder)
+            : null;
+
         $response = $this->html([
-            'folderId'      => $this->folderParam(),
-            'folderOptions' => $this->folderOptions(),
-            'maxBytes'      => UploadService::serverMaxBytes(),          // transport cap — all files
-            'maxImageBytes' => UploadService::effectiveMaxUploadBytes(), // memory cap — images only
-            'base'          => $this->groupBase(),
+            'folderId'       => $target,
+            'folderOptions'  => $this->folderOptions(),
+            'maxBytes'       => UploadService::serverMaxBytes(),          // transport cap — all files
+            'maxImageBytes'  => UploadService::effectiveMaxUploadBytes(), // memory cap — images only
+            'targetDelivery' => $targetDelivery,
+            'base'           => $this->groupBase(),
         ]);
         $this->layoutManager->addPartials('_upload', 'Documents/DriveController', self::DMS_NS);
         $response->addCommand('load-script', [
@@ -881,7 +891,7 @@ trait DriveControllerTrait
         $type = DI::getRequest()->getGetParameter('type') === 'folder' ? 'folder' : 'document';
         $id   = (int) DI::getRequest()->getGetParameter('id');
 
-        [$name, $isActive] = $this->actionsResource($type, $id);
+        [$name, $isActive, $isDriveRoot, $delivery] = $this->actionsResource($type, $id);
         if ($name === null) {
             return $this->fetchError(($type === 'folder' ? 'Ordner' : 'Dokument') . ' nicht gefunden');
         }
@@ -908,6 +918,14 @@ trait DriveControllerTrait
             'id'       => $id,
             'name'     => $name,
             'isActive' => $isActive,
+            // The drive root is lifecycle-locked (ADR-021): no move, no delete, it stores
+            // no documents and is always active. The domain throws on all four — the hub
+            // must not offer them (DMS-ROOT-001).
+            'isDriveRoot' => $isDriveRoot,
+            // Effective delivery of the resource, INHERITED down the chain — the one
+            // property nothing in the Drive showed, although it decides whether the
+            // content is world-readable (DMS-DELIVERY-VIS-001).
+            'delivery' => $delivery,
             // Current drive selection, so the inline active switch refreshes that view.
             'folder'   => $this->folderParam(),
             'doc'      => $this->docParam(),
@@ -918,19 +936,33 @@ trait DriveControllerTrait
     }
 
     /**
-     * Resolve the hub resource: `[name, isActive]`, or `[null, false]` when it does not
-     * exist or the principal may not read it (RF-4a).
+     * Resolve the hub resource: `[name, isActive, isDriveRoot, effectiveDelivery]`, or
+     * `[null, …]` when it does not exist or the principal may not read it (RF-4a).
      *
-     * @return array{0: ?string, 1: bool}
+     * @return array{0: ?string, 1: bool, 2: bool, 3: string}
      */
     private function actionsResource(string $type, int $id): array
     {
         if ($type === 'folder') {
             $folder = $this->readableFolder($id);
-            return $folder !== null ? [$folder->getName(), $folder->isActive()] : [null, false];
+            if ($folder === null) {
+                return [null, false, false, 'protected'];
+            }
+            $isRoot = $folder->getKey() === Folder::DRIVE_KEY;
+            return [
+                $folder->getName(),
+                $folder->isActive(),
+                $isRoot,
+                // The root delivers nothing itself (it stores no documents) — reporting
+                // its `protected` fallback there would be a claim about a thing that
+                // cannot happen, so it is reported as the neutral 'none'.
+                $isRoot ? 'none' : $this->docService()->effectiveFolderDeliveryMode($folder),
+            ];
         }
         $doc = $this->readableDoc($id);
-        return $doc !== null ? [$doc->getDisplayName(), $doc->isActive()] : [null, false];
+        return $doc !== null
+            ? [$doc->getDisplayName(), $doc->isActive(), false, $this->docService()->effectiveDeliveryMode($doc)]
+            : [null, false, false, 'protected'];
     }
 
     // ── trash (soft-delete recovery, ADR-017) ────────────────────────────────────

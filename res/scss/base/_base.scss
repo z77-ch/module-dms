@@ -12,6 +12,21 @@
 .dms *::before,
 .dms *::after { box-sizing: inherit; }
 
+/* Opt-in: the fragment fills the host's remaining height instead of growing with its
+   content. A workspace inside needs it — `.z77-split { height: 100% }` resolves only
+   against a parent whose height is DEFINITE, and a plain `.dms` sitting in a flex column
+   (the backend shell's content column) has content height, so the percentage silently
+   falls back to `auto`, the panes grow, and the HOST scrolls instead of the panes.
+   Opt-in and not on `.dms` itself: a fragment embedded as a block in a page — an upload
+   box, a small file list — must keep its content height. */
+.dms--fill {
+    display:        flex;
+    flex-direction: column;
+    flex:           1 1 auto;   // host container is a flex column (the backend shell)
+    min-height:     0;
+    height:         100%;       // host container is a plain block with a definite height
+}
+
 /* Tame the few raw elements the fragment uses, scoped under `.dms`. */
 .dms p,
 .dms h1,
