@@ -81,6 +81,7 @@ final class SaveService
         // DMS rebuild (ADR-017 / R1): ownership, active gate, slug, image dimensions.
         $doc->setOwnerId($req->ownerId ?? $req->createdBy);
         $doc->setActive($req->active);
+        $doc->setSortKey($this->em->getRepository(Document::class)->nextSortKey($req->folderId)); // manual order: append
         $doc->setSlug($this->uniqueSlug(
             $req->displayName !== '' ? $req->displayName : $req->originalName,
             $doc->getFolderId(),
@@ -161,6 +162,7 @@ final class SaveService
         $doc->setMeta($req->meta);
         $doc->setOwnerId($req->ownerId ?? $req->createdBy);
         $doc->setActive($req->active);
+        $doc->setSortKey($this->em->getRepository(Document::class)->nextSortKey($req->folderId)); // manual order: append
         $doc->setSlug($this->uniqueSlug(
             $req->displayName !== '' ? $req->displayName : $req->originalName,
             $doc->getFolderId(),

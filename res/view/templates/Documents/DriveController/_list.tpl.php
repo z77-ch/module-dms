@@ -3,6 +3,8 @@
  * DMS Drive — middle document-list pane (R6c). Self-contained partial shared by the
  * full-page render and the in-place `replace-html` pane update. File rows carry the
  * full-reload `href` plus the `data-pane` fetch endpoint (see {@see _tree.tpl.php}).
+ * Rows are server-rendered `draggable` for the manual order (drive.js posts the drop to the
+ * server-built `data-sort-url` with the row's entity token; the list order IS `sortKey`).
  *
  * @var array    $files            file row view-models
  * @var int|null $selectedFolderId
@@ -37,7 +39,8 @@ $ctx = '&folder=' . ($selectedFolderId ?? '') . '&doc=' . ($selectedDoc ?? '');
            by CSS `:has()` as soon as one row checkbox is checked — no JS for the reveal. */ ?>
   <div class="dms-filelist"
        data-bulk-delete-url="<?= e($base . '/drive/bulk-confirm-delete?folder=' . ($selectedFolderId ?? '')) ?>"
-       data-bulk-move-url="<?= e($base . '/drive/bulk-move?folder=' . ($selectedFolderId ?? '')) ?>">
+       data-bulk-move-url="<?= e($base . '/drive/bulk-move?folder=' . ($selectedFolderId ?? '')) ?>"
+       data-sort-url="<?= e($base . '/drive/sort') ?>">
     <div class="dms-filelist-bulkbar">
       <span class="dms-filelist-bulkbar__count" data-bulk-count></span>
       <button type="button" class="dms-btn dms-btn--ghost" data-bulk-all>Alle</button>
@@ -47,7 +50,8 @@ $ctx = '&folder=' . ($selectedFolderId ?? '') . '&doc=' . ($selectedDoc ?? '');
       <button type="button" class="dms-btn dms-btn--muted" data-bulk-action="delete">Löschen</button>
     </div>
     <?php foreach ($files as $f): ?>
-    <div class="dms-file<?= $f['isActive'] ? ' dms-file--active' : '' ?><?= $f['active'] ? '' : ' dms-file--inactive' ?>">
+    <div class="dms-file<?= $f['isActive'] ? ' dms-file--active' : '' ?><?= $f['active'] ? '' : ' dms-file--inactive' ?>"
+         draggable="true" data-doc-id="<?= (int) $f['id'] ?>" data-sort-token="<?= e($f['sortToken']) ?>">
       <input type="checkbox" class="dms-file__select" data-bulk-check
              value="<?= (int) $f['id'] ?>" aria-label="«<?= e($f['displayName']) ?>» auswählen">
       <span class="dms-file__thumb dms-file__thumb--<?= e($f['thumbClass']) ?>">

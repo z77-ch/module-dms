@@ -234,6 +234,10 @@ final class UploadService
             throw new \RuntimeException("Aufbewahrungsfrist läuft noch (bis {$until}) — Überschreiben gesperrt.");
         }
 
+        // In-place replace keeps id/slug/URL: the static copy would keep serving the OLD
+        // bytes (the web server ignores the `?v=` token), so drop it before the bytes change.
+        $docs->invalidateMaterialized($existing);
+
         return $this->saveService->replaceFromUpload($existing, $file, $request, $checksum);
     }
 

@@ -110,6 +110,15 @@ class Document
     /** `sealed|protected|public`; null = inherit from the folder chain (ADR-017). */
     private ?string $deliveryMode = null;
 
+    /**
+     * Manual order among the LIVE documents of one folder (lower first, id as the stable
+     * tie-breaker) — the order the Drive shows and `DocumentService::listByFolder()` returns,
+     * so a consumer (a slider, a gallery) renders what the editor arranged. Server-controlled
+     * (no `#[Clean]`): appended on save/move, changed only via `DocumentService::reorder()`.
+     * Rows persisted before the field existed read as `0` → they keep their id order.
+     */
+    private int $sortKey = 0;
+
     private ?int $createdBy = null;
     private ?string $createdAt = null;
     private ?string $updatedAt = null;
@@ -139,6 +148,7 @@ class Document
     public function getWidth(): ?int { return $this->width; }
     public function getHeight(): ?int { return $this->height; }
     public function getDeliveryMode(): ?string { return $this->deliveryMode; }
+    public function getSortKey(): int { return $this->sortKey; }
     public function getCreatedBy(): ?int { return $this->createdBy; }
     public function getCreatedAt(): ?string { return $this->createdAt; }
     public function getUpdatedAt(): ?string { return $this->updatedAt; }
@@ -183,6 +193,7 @@ class Document
     {
         $this->deliveryMode = in_array($deliveryMode, ['sealed', 'protected', 'public'], true) ? $deliveryMode : null;
     }
+    public function setSortKey(int $sortKey): void { $this->sortKey = max(0, $sortKey); }
     public function setCreatedBy(?int $createdBy): void
     {
         $this->createdBy = ($createdBy !== null && $createdBy > 0) ? $createdBy : null;

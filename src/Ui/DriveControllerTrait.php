@@ -309,7 +309,6 @@ trait DriveControllerTrait
                 overwrite: $overwrite,
                 poster: $poster,
             );
-            $this->docService()->rebuildMaterialization(); // a new file may land in a public folder
 
             return $this->fetch()
                 ->setStatus('success')
@@ -593,6 +592,38 @@ trait DriveControllerTrait
         $this->docService()->delete($id); // soft-delete (keeps the bytes); domain-gated manage
         $this->messageService->pushFlash('success', 'Dokument gelöscht');
         return $this->paneRefresh($folderId, null);
+    }
+
+    /**
+     * Manual order (drag & drop in the list pane): move document `id` to the 0-based
+     * `new_index` among its folder siblings. `#[Fetch]` (global CSRF) PLUS the per-entity
+     * token (DMS-SEC-001 rule for a mutating POST). The domain gates `write` on the folder
+     * and renumbers the group ({@see DocumentService::reorder}). No pane refresh in the
+     * response: drive.js relocates the row it just dropped — the server has already
+     * renumbered, so the next pane render shows the same order.
+     */
+    #[Fetch, HttpMethod('POST')]
+    protected function sortAction(): FetchResponse
+    {
+        $body     = DI::getRequest()->getJsonBody();
+        $id       = (int) ($body['id'] ?? 0);
+        $newIndex = max(0, (int) ($body['new_index'] ?? 0));
+        if ($id <= 0) {
+            return $this->fetchError('Missing id');
+        }
+        if (!DI::getCsrfService()->validateEntityToken(trim($body['entity_csrf'] ?? ''), 'document', $id)) {
+            return $this->fetchError('Invalid token');
+        }
+        if ($this->readableDoc($id) === null) {
+            return $this->fetchError('Dokument nicht gefunden');
+        }
+        try {
+            $this->docService()->reorder($id, $newIndex);
+        } catch (NotFoundException) {
+            return $this->fetchError('Sortieren nicht möglich (keine Schreibrechte im Ordner).');
+        }
+
+        return $this->fetch()->setStatus('success');
     }
 
     // ── bulk actions (v1: documents only — delete / move) ────────────────────────
@@ -1359,6 +1390,7 @@ trait DriveControllerTrait
             'active'       => $doc->isActive(),
             'dimensions'   => ($doc->getWidth() && $doc->getHeight()) ? $doc->getWidth() . '×' . $doc->getHeight() : null,
             'isActive'     => $id === $selectedDoc,
+            'sortToken'    => DI::getCsrfService()->generateEntityToken('document', $id), // drag & drop → sortAction
         ];
     }
 

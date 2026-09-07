@@ -24,7 +24,8 @@ use Z77\Core\Controller\AbstractBaseController,
  * Delivery (ADR-017 §3):
  *  - `public`            → served openly (no ACL); the web server normally serves the
  *                          materialized static copy and only an un-materialized public file
- *                          reaches PHP here (materialization = R5).
+ *                          reaches PHP here — which then WRITES that file (lazy fill, ADR-017
+ *                          rev. 2026-09-07) so the next hit is static again.
  *  - `protected`/`sealed` → `AclService::canRead()` (effective `READ` + the full `active`
  *                          chain) MUST pass BEFORE any byte; otherwise **404** (existence is
  *                          never leaked — same response as "not found").
@@ -62,6 +63,14 @@ class OutputController extends AbstractBaseController
             // never serves what the static copy would not (R6).
             if (!$service->isActiveChain($doc)) {
                 throw new NotFoundException('Media not found.');
+            }
+            // Lazy fill: put this variant at its static path so the web server serves the
+            // next hit itself. Best-effort — an unwritable docroot must not break delivery,
+            // the PHP stream below still answers (and the failure is logged, not hidden).
+            try {
+                $service->materialize($doc, $variant);
+            } catch (\RuntimeException $e) {
+                error_log('[dms] ' . $e->getMessage());
             }
             $cacheControl = 'public, max-age=31536000, immutable';
         } else {

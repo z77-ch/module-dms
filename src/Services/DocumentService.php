@@ -74,13 +74,19 @@ final class DocumentService
     // ── read ────────────────────────────────────────────────────────────────
 
     /**
-     * Live (non-deleted) documents in a folder.
+     * Live (non-deleted) documents in a folder, in the EDITOR'S order: `sortKey`, id as the
+     * stable tie-breaker — never file/record order (a SQL driver has no order without
+     * `ORDER BY`). This is the order the Drive shows and a consumer (slider, gallery) renders.
      *
      * @return Document[]
      */
     public function listByFolder(?int $folderId): array
     {
-        return $this->live($this->documents->findByFolder($folderId));
+        $docs = $this->live($this->documents->findByFolder($folderId));
+        usort($docs, static fn(Document $a, Document $b) =>
+            [$a->getSortKey(), (int) $a->getId()] <=> [$b->getSortKey(), (int) $b->getId()]);
+
+        return $docs;
     }
 
     /**
@@ -740,9 +746,7 @@ final class DocumentService
      */
     public function saveGenerated(string $bytes, SaveRequest $req): Document
     {
-        $doc = $this->saveService->saveGenerated($bytes, $req);
-        $this->rebuildMaterialization();
-        return $doc;
+        return $this->saveService->saveGenerated($bytes, $req); // nothing materialized yet — lazy fill
     }
 
     /**
@@ -871,7 +875,7 @@ final class DocumentService
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
-        $this->rebuildMaterialization();
+        $this->invalidateMaterialized($doc); // AFTER the flush: a racing lazy fill re-gates on the new state
     }
 
     /**
@@ -916,8 +920,7 @@ final class DocumentService
         $doc->setDeletedAt(null);
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
-        $this->em->flush();
-        $this->rebuildMaterialization();
+        $this->em->flush(); // a public one refills lazily on its next hit
     }
 
     /**
@@ -940,9 +943,9 @@ final class DocumentService
             throw new \RuntimeException("Aufbewahrungsfrist läuft noch (bis {$until}) — endgültiges Löschen gesperrt.");
         }
 
+        $this->invalidateMaterialized($doc); // normally gone since the soft-delete; cheap safety
         $this->blob->delete($id);   // all variants
         $this->em->remove($doc);    // metadata record
-        $this->rebuildMaterialization();
     }
 
     /**
@@ -975,11 +978,46 @@ final class DocumentService
         }
         $this->authz->require('folder', $folderId, 'write');
 
+        $this->invalidateMaterialized($doc); // at the OLD path — before the folder changes
         $doc->setFolderId($folderId);
+        $doc->setSortKey($this->documents->nextSortKey($folderId)); // manual order: append at the end of the target
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
-        $this->rebuildMaterialization();
+    }
+
+    /**
+     * Manual order (the Drive's drag & drop): move a live document to the 0-based
+     * `$newIndex` among its folder siblings, then renumber the group densely `0..n`.
+     * Gated on `write` of the FOLDER — order is a property of the folder's content, and the
+     * renumbering touches the siblings too. Only changed rows are persisted. Metadata-only:
+     * no path, gate or bytes change, so the materialized copy is untouched.
+     *
+     * @throws NotFoundException when the document is unknown/deleted or access is denied
+     *                           (the domain never distinguishes the two)
+     */
+    public function reorder(int $id, int $newIndex): void
+    {
+        $doc      = $this->get($id);
+        $folderId = $doc?->getFolderId();
+        if ($doc === null || $folderId === null) {
+            throw new NotFoundException('Document not found.');
+        }
+        $this->authz->require('folder', $folderId, 'write');
+
+        $group = array_values(array_filter(
+            $this->listByFolder($folderId),
+            static fn(Document $d) => (int) $d->getId() !== $id
+        ));
+        array_splice($group, max(0, min($newIndex, count($group))), 0, [$doc]);
+
+        foreach ($group as $pos => $sibling) {
+            if ($sibling->getSortKey() !== $pos) {
+                $sibling->setSortKey($pos);
+                $this->em->persist($sibling);
+            }
+        }
+        $this->em->flush();
     }
 
     /**
@@ -1000,7 +1038,7 @@ final class DocumentService
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
-        $this->rebuildMaterialization();
+        $this->invalidateMaterialized($doc); // AFTER the flush (path unchanged): a racing lazy fill re-gates on the new state
     }
 
     /**
@@ -1024,7 +1062,7 @@ final class DocumentService
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
-        $this->rebuildMaterialization();
+        $this->invalidateMaterialized($doc); // AFTER the flush (path unchanged): a racing lazy fill re-gates on the new state
     }
 
     /**
@@ -1051,13 +1089,13 @@ final class DocumentService
         $folder->setDeliveryMode($mode);
         $this->em->persist($folder);
         $this->em->flush();
-        $this->rebuildMaterialization();
+        $this->invalidateMaterializedFolder($folderId); // AFTER the flush: the inherited gate spans the subtree
     }
 
     /**
      * Toggle a folder's `active` output gate (ADR-017). Like {@see setActive} for documents:
-     * an inactive folder hides its whole subtree from public delivery (materialization skips
-     * it). A no-op for an unknown folder.
+     * an inactive folder hides its whole subtree from public delivery (its materialized
+     * subtree is removed, the fallback refuses it). A no-op for an unknown folder.
      *
      * @throws NotFoundException when the folder is unknown
      */
@@ -1076,7 +1114,7 @@ final class DocumentService
         $folder->setActive($active);
         $this->em->persist($folder);
         $this->em->flush();
-        $this->rebuildMaterialization();
+        $this->invalidateMaterializedFolder($folderId); // AFTER the flush: the inherited gate spans the subtree
     }
 
     /**
@@ -1246,50 +1284,94 @@ final class DocumentService
         return $parent instanceof Folder && $parent->getParentId() === null;
     }
 
-    // ── public materialization (ADR-017 §2 / R6) ─────────────────────────────────
+    // ── public materialization (ADR-017 §2 / R6 — lazy fill, rev. 2026-09-07) ───
 
     /**
-     * Idempotent rebuild of the static public copy (ADR-017 / ADR-020): clear every
-     * partition directory under `public/media`, then write every live, active-chain,
-     * effectively-`public` document's bytes (original + image variants) to the path that
-     * mirrors its `/media` URL — top segment = the root-folder slug. So the web server
-     * serves them statically and only un-materialized public files ever reach the
-     * {@see \Z77\Module\Dms\Ui\Controllers\Media\OutputController}. Pure function of
-     * blob + metadata; carries no own state, so it is always safe to re-run. Called after
-     * every DMS mutation that can change public delivery (mode / active / slug / folder /
-     * delete). Clearing per CHILD directory also removes orphans of renamed human roots.
-     * (Perf: fine for the low-volume DMS; a targeted diff is a later optimisation.)
+     * The static public copy under `public/media` is a LAZILY filled cache, not an eagerly
+     * rebuilt mirror (ADR-017 rev. 2026-09-07). A `/media` request the web server cannot
+     * serve statically reaches the `OutputController`, which — after the public + active-chain
+     * gate — writes exactly the requested variant here, so the next request is static again.
+     * Mutations never WRITE the copy; they only REMOVE what they made stale
+     * ({@see invalidateMaterialized} for one document, {@see invalidateMaterializedFolder}
+     * for a subtree). The copy stays a pure projection of blob + metadata with no own state:
+     * the whole tree may be wiped at any time and refills on demand.
      *
-     * Wipe guard (S5): only direct children of `public/media` are removed — never
-     * `public/media` itself, and never via a data-driven path concatenation.
+     * Re-gates internally (public + active chain) so a misuse can never place a
+     * protected/sealed byte in the docroot. A no-op for an unknown variant, a missing blob,
+     * or a document without a resolvable public path. Written via temp file + rename so a
+     * concurrent first hit never serves a half-written file.
+     *
+     * @throws \RuntimeException when the media directory cannot be created or written
      */
-    public function rebuildMaterialization(): void
+    public function materialize(Document $doc, string $variant = BlobStorage::ORIGINAL): void
     {
-        // Ensure the single-root invariant first (get-or-create + stray adoption,
-        // ADR-021): every mutation path runs through here, so pre-ADR-021 data heals
-        // before any path is derived.
-        $this->driveRoot();
+        if ($doc->isDeleted()
+            || $this->effectiveDeliveryMode($doc) !== 'public'
+            || !$this->isActiveChain($doc)
+        ) {
+            return;
+        }
+        if ($variant !== BlobStorage::ORIGINAL && !array_key_exists($variant, $doc->getVariants())) {
+            return;
+        }
+        $dir = $this->materializedDir($doc);
+        if ($dir === null) {
+            return; // no public address (S5: corrupt chain / unslugged) — never a write into the base
+        }
+        $source = $this->blob->path($doc->getId(), $variant, $this->variantExt($doc, $variant));
+        if ($source === null) {
+            return;
+        }
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new \RuntimeException("Materialization: cannot create directory '{$dir}'.");
+        }
+        $file = $dir . '/' . $this->materializedName($doc, $variant);
+        $tmp  = $file . '.' . uniqid('', true) . '.tmp';
+        if (!copy($source, $tmp) || !rename($tmp, $file)) {
+            @unlink($tmp);
+            throw new \RuntimeException("Materialization: cannot write '{$file}'.");
+        }
+    }
 
-        $base = $this->mediaBase();
-        if (is_dir($base)) {
-            foreach (scandir($base) ?: [] as $entry) {
-                if ($entry === '.' || $entry === '..') {
-                    continue;
-                }
-                $path = $base . '/' . $entry;
-                if (is_dir($path)) {
-                    $this->rrmdir($path);
-                } else {
-                    @unlink($path);
-                }
+    /**
+     * Remove the document's materialized files (original + every variant) at its CURRENT
+     * folder path. Ordering rule: a mutation that changes the PATH (folderId, slug) or the
+     * BYTES (replace: variants, checksum) MUST call it BEFORE the change — afterwards the old
+     * location is no longer derivable; a mutation that only changes the GATE (delete, active,
+     * deliveryMode) calls it AFTER the flush, so a lazy fill racing the write re-gates on the
+     * committed state instead of re-creating the file. Cheap (a handful of unlinks), so every
+     * public-relevant document mutation calls it unconditionally; the next public hit refills.
+     */
+    public function invalidateMaterialized(Document $doc): void
+    {
+        $dir = $this->materializedDir($doc);
+        if ($dir === null || !is_dir($dir)) {
+            return;
+        }
+        foreach (array_merge([BlobStorage::ORIGINAL], array_keys($doc->getVariants())) as $variant) {
+            $file = $dir . '/' . $this->materializedName($doc, $variant);
+            if (is_file($file)) {
+                @unlink($file);
             }
         }
+    }
 
-        foreach ($this->listAll() as $doc) {
-            if ($this->effectiveDeliveryMode($doc) === 'public' && $this->isActiveChain($doc)) {
-                $this->writeMaterialized($doc);
-            }
+    /**
+     * Remove the materialized subtree of a folder (its whole `public/media/<chain>` directory).
+     * For folder-level changes whose effect spans descendants: slug/parent change (paths move),
+     * `deliveryMode`/`active` (inherited gate). Same ordering rule as
+     * {@see invalidateMaterialized}: BEFORE a path change, AFTER the flush of a gate change.
+     *
+     * Wipe guard (S5): the drive root or a broken chain yields no path → nothing is removed;
+     * `public/media` itself is never a target and the path is never data-driven beyond slugs.
+     */
+    public function invalidateMaterializedFolder(int $folderId): void
+    {
+        $relPath = $this->folderSlugPathFor($folderId);
+        if ($relPath === '' || str_contains($relPath, '..')) {
+            return;
         }
+        $this->rrmdir($this->mediaBase() . '/' . $relPath);
     }
 
     /** Absolute base of the materialized files under the docroot. */
@@ -1298,11 +1380,32 @@ final class DocumentService
         return ABS_BASE_PATH . '/public/media';
     }
 
+    /** The document's materialized directory, or null when it has no public address. */
+    private function materializedDir(Document $doc): ?string
+    {
+        $relPath = $this->folderSlugPath($doc);
+        if ($relPath === '' || $doc->getSlug() === '') {
+            return null;
+        }
+
+        return $this->mediaBase() . '/' . $relPath;
+    }
+
+    /** `<slug>.<ext>` for the original, `<slug>.<variant>.<ext>` for a derivative (= the `/media` leaf). */
+    private function materializedName(Document $doc, string $variant): string
+    {
+        $ext = $this->variantExt($doc, $variant); // a derivative carries its OWN ext (a video poster is jpg)
+
+        return $variant === BlobStorage::ORIGINAL
+            ? "{$doc->getSlug()}.{$ext}"
+            : "{$doc->getSlug()}.{$variant}.{$ext}";
+    }
+
     /**
      * The document is servable openly only if it and every ancestor folder are active.
-     * Public: consulted by both the materialization job (which files to write) and the
-     * `OutputController` PHP fallback (so an un-materialized public doc under an inactive
-     * ancestor is not leaked) — the two must agree.
+     * Public: consulted by both the lazy materialization (whether a file may be written)
+     * and the `OutputController` PHP fallback (so an un-materialized public doc under an
+     * inactive ancestor is not leaked) — the two must agree.
      */
     public function isActiveChain(Document $doc): bool
     {
@@ -1325,38 +1428,6 @@ final class DocumentService
         return true;
     }
 
-    /** Write the original + every image variant to the materialized media path. */
-    private function writeMaterialized(Document $doc): void
-    {
-        $relPath = $this->folderSlugPath($doc);
-        if ($relPath === '') {
-            // No resolvable folder chain — corrupt data; loud, never a write into the base (S5).
-            throw new \RuntimeException(
-                "Materialization: document {$doc->getId()} has no resolvable folder-slug chain."
-            );
-        }
-        $dir = $this->mediaBase() . '/' . $relPath;
-
-        $variants = array_merge([BlobStorage::ORIGINAL], array_keys($doc->getVariants()));
-        foreach ($variants as $variant) {
-            // Each variant carries its own extension (a video poster is `jpg`, not the video's ext).
-            $ext   = $this->variantExt($doc, $variant);
-            $bytes = $this->blob->get($doc->getId(), $variant, $ext);
-            if ($bytes === null) {
-                continue;
-            }
-            if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
-                throw new \RuntimeException("Materialization: cannot create directory '{$dir}'.");
-            }
-            $file = $dir . '/' . ($variant === BlobStorage::ORIGINAL
-                ? "{$doc->getSlug()}.{$ext}"
-                : "{$doc->getSlug()}.{$variant}.{$ext}");
-            if (file_put_contents($file, $bytes, LOCK_EX) === false) {
-                throw new \RuntimeException("Materialization: cannot write '{$file}'.");
-            }
-        }
-    }
-
     /**
      * The document's folder-slug chain (partition → leaf, first segment = the partition
      * slug), joined for the media path. The drive root's own slug is NOT a segment
@@ -1367,9 +1438,13 @@ final class DocumentService
     private function folderSlugPath(Document $doc): string
     {
         $folderId = $doc->getFolderId();
-        if ($folderId === null) {
-            return '';
-        }
+
+        return $folderId === null ? '' : $this->folderSlugPathFor($folderId);
+    }
+
+    /** {@see folderSlugPath} for a folder id (the folder's own chain, itself included). */
+    private function folderSlugPathFor(int $folderId): string
+    {
         $index = $this->folderIndex();
         $slugs = [];
         $cur   = $folderId;

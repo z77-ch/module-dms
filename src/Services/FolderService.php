@@ -87,7 +87,7 @@ final class FolderService
         return $folder;
     }
 
-    /** Rename a folder (name + re-slug); re-materializes descendant public paths. */
+    /** Rename a folder (name + re-slug); drops the descendants' stale materialized paths. */
     public function rename(int $id, string $name): Folder
     {
         $this->authz->require('folder', $id, 'manage');
@@ -96,17 +96,17 @@ final class FolderService
         $this->requirePartitionGate($folder); // partition lifecycle = SUPER_USER (ADR-021/D5)
         $this->assertName($name);
 
+        $this->documents->invalidateMaterializedFolder($id); // slug change → old descendant media paths, BEFORE re-slug
         $folder->setName($name);
         $folder->setSlug($this->uniqueSlug($folder));
         $this->em->persist($folder);
         $this->em->flush();
-        $this->documents->rebuildMaterialization(); // slug change → descendant media paths
 
         return $folder;
     }
 
     /**
-     * Move a folder under $targetId; re-materializes descendant public paths.
+     * Move a folder under $targetId; drops the descendants' stale materialized paths.
      * Moving to the top (`null`) creates a new partition root → Super-User only.
      */
     public function move(int $id, ?int $targetId): Folder
@@ -134,11 +134,11 @@ final class FolderService
             throw new \InvalidArgumentException('Ein Ordner kann nicht in sich selbst oder einen Unterordner verschoben werden.');
         }
 
+        $this->documents->invalidateMaterializedFolder($id); // reparent → old descendant media paths, BEFORE the change
         $folder->setParentId($targetId);
         $folder->setSlug($this->uniqueSlug($folder)); // re-unique among the new siblings
         $this->em->persist($folder);
         $this->em->flush();
-        $this->documents->rebuildMaterialization(); // reparent → descendant media paths
 
         return $folder;
     }
@@ -234,6 +234,7 @@ final class FolderService
             throw new \RuntimeException($reason);
         }
         $parentId = $folder->getParentId();
+        $this->documents->invalidateMaterializedFolder($id); // an empty folder may still own an empty media directory
         $this->em->remove($folder);
 
         return $parentId;
