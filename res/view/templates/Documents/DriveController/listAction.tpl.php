@@ -36,9 +36,10 @@ $ns = 'Documents/DriveController/';
   <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
 </svg>
 
-<?php /* The toolbar (breadcrumb PATH + upload / new-folder / trash actions) now lives in the backend
-         shell header band — hc1 (upload) + hc2 (path + actions), auto-loaded from module-backend's
-         Documents/DriveController/list.hc{1,2}.tpl.php. The breadcrumb pane keeps its `.dms-drive__breadcrumb`
+<?php /* The toolbar now lives in the backend shell header band, auto-loaded from module-backend's
+         Documents/DriveController/: the upload in the action cell (`list.act`, ADR-033 rev.
+         2026-10-08), the folder / trash tools in the toolbar (`list.hc2`), the breadcrumb PATH in
+         the crumb line (`list.hc3`). The breadcrumb pane keeps its `.dms-drive__breadcrumb`
          class + server-built data-urls there, so DriveControllerTrait::panes still refreshes it in place.
          `data-drive-scope` marks the fragment (tree/list/preview links + document actions) for drive.js;
          the header slots carry the same marker. */ ?>

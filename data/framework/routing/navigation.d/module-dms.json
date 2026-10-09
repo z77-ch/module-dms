@@ -1,0 +1,28 @@
+[
+    {
+        "key": "drive",
+        "name": "Drive",
+        "module": "",
+        "group": "",
+        "controller": "",
+        "action": "",
+        "slot": "backend-main",
+        "active": true,
+        "param": "",
+        "sort_key": 4,
+        "parent_key": null
+    },
+    {
+        "key": "dokumente",
+        "name": "Dokumente",
+        "module": "backend",
+        "group": "documents",
+        "controller": "drive",
+        "action": "list",
+        "slot": "",
+        "active": true,
+        "param": "",
+        "sort_key": 0,
+        "parent_key": "drive"
+    }
+]
