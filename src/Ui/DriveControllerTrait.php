@@ -19,7 +19,8 @@ use Z77\Core\Config\AuthRole,
     Z77\Module\Dms\Services\FolderService,
     Z77\Module\Dms\Services\NameConflictException,
     Z77\Module\Dms\Services\UploadService,
-    Z77\Shared\Tree\TreeService
+    Z77\Shared\Tree\TreeService,
+    Z77\Shared\Upload\UploadPolicy
 ;
 
 /**
@@ -224,11 +225,32 @@ trait DriveControllerTrait
     // ── upload ──────────────────────────────────────────────────────────────────
 
     /**
-     * The Drive's upload modal (file picker + target-folder select, defaulting to the
-     * folder currently open in the Drive). Reuses the shared multipart client
-     * `documents/upload.js` (lazy-loaded into the popup) — the same building block as the
-     * legacy `documents` tool; only the endpoint differs so success can return to the
-     * Drive (see {@see uploadAction}).
+     * What the Drive lets in — the ONE source for the client's gate and the server's check
+     * (UPLOAD-001). Two caps, and they are not the same thing: EVERY file is bounded by
+     * what PHP accepts over the wire, an `image/*` additionally by what GD can decode into
+     * memory. A video is only moved, so the transport cap is its only limit.
+     *
+     * `ask` on a name conflict: the Drive has always put that question to the operator, and
+     * the component's prompt is that question (the row waits, the other files go on).
+     */
+    private function driveUploadPolicy(): UploadPolicy
+    {
+        return new UploadPolicy(
+            endpoint:    $this->groupBase() . '/drive/upload',
+            field:       'files[]',
+            multiple:    true,
+            maxBytes:    UploadService::serverMaxBytes(),
+            onConflict:  UploadPolicy::CONFLICT_ASK,
+            label:       'Dateien hierher ziehen',
+            maxBytesPer: ['image/*' => UploadService::effectiveMaxUploadBytes()],
+        );
+    }
+
+    /**
+     * The Drive's upload modal: THE upload component (UPLOAD-001) plus what is the Drive's
+     * own — the target-folder select (defaulting to the folder currently open), the
+     * «Original ausliefern» switch, and the video poster provider. The component itself is
+     * loaded with every backend page; only the poster script is lazy-loaded here.
      */
     protected function addAction(): HtmlResponse
     {
@@ -242,27 +264,31 @@ trait DriveControllerTrait
             : null;
 
         $response = $this->html([
+            'uploadPolicy'   => $this->driveUploadPolicy(),
             'folderId'       => $target,
             'folderOptions'  => $this->folderOptions(),
-            'maxBytes'       => UploadService::serverMaxBytes(),          // transport cap — all files
-            'maxImageBytes'  => UploadService::effectiveMaxUploadBytes(), // memory cap — images only
             'targetDelivery' => $targetDelivery,
             'base'           => $this->groupBase(),
         ]);
         $this->layoutManager->addPartials('_upload', 'Documents/DriveController', self::DMS_NS);
+        // The poster provider registers itself on load; `bind-upload` then binds the
+        // component inside the popup body, which arrived after the page's own bind ran.
         $response->addCommand('load-script', [
-            'src'   => $this->layoutManager->resolveJsPath('documents/upload', self::DMS_NS),
-            'init'  => 'documents-upload',
+            'src'   => $this->layoutManager->resolveJsPath('documents/upload-poster', self::DMS_NS),
             'scope' => '[data-z77-popup-body]',
         ]);
+        $response->addCommand('bind-upload', ['selector' => '[data-z77-popup-body]']);
+
         return $response;
     }
 
     /**
-     * Per-file multipart upload endpoint (ONE file per POST, under `files[]`). The client
-     * ({@see documents/upload.js}) drives a sequential XHR queue and one request per file, so
-     * this endpoint saves exactly one file and returns a PER-FILE result — it MUST NOT
-     * redirect or aggregate; the client collects the outcomes and refreshes the Drive once.
+     * Per-file multipart upload endpoint (ONE file per POST, under `files[]`). The client is
+     * THE upload component (`Z77\Shared` `upload.js`, UPLOAD-001, since 2026-10-09 — it
+     * replaced the Drive's own uploader): it runs three requests at a time and shows a row
+     * per file, so this endpoint saves exactly one file and returns a PER-FILE result — it
+     * MUST NOT redirect or aggregate. The pane-refresh commands it attaches on success are
+     * executed once, after the last file.
      *
      * Bytes go through {@see UploadService} (allowlist + finfo sniff, `write` gate on the
      * target folder); the folder chain's effective `deliveryMode` applies (default `protected`).
@@ -310,7 +336,11 @@ trait DriveControllerTrait
                 poster: $poster,
             );
 
-            return $this->fetch()
+            // The panes of the Drive, and the modal closed — the same success response an
+            // in-place document action gives. The component collects these commands and
+            // runs them ONCE, after the last file of the run, and only when no file
+            // failed: a run with a refusal keeps its modal and its rows (UPLOAD-001).
+            return $this->paneRefresh($folderId, (int) $doc->getId())
                 ->setStatus('success')
                 ->setData(['id' => (int) $doc->getId(), 'name' => $name]);
         } catch (DuplicateUploadException) {
