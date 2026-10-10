@@ -36,6 +36,7 @@ $deliveryInfo = [
 ?>
 <div class="dms-actions">
     <div class="be-modal__header"><h2 class="be-modal__title">Aktionen — «<?= e($name) ?>»</h2></div>
+    <?= $this->partial('partials/modalActions', ['submit' => '', 'cancel' => 'Schliessen'], 'Z77\\Shared') ?>
     <div class="be-modal__body">
         <?php if ($isDriveRoot): ?>
         <p style="font-size:.75rem;color:var(--be-muted,#94a3b8);margin:0 0 .65rem">
@@ -82,8 +83,5 @@ $deliveryInfo = [
             <button type="button" class="be-btn be-btn--danger" style="justify-content:flex-start" data-fetch-get="<?= e($delUrl) ?>"><?= $ic('i-trash') ?> Löschen</button>
             <?php endif; ?>
         </div>
-    </div>
-    <div class="be-modal__footer">
-        <button type="button" class="be-btn be-btn--ghost" data-popup-close>Schliessen</button>
     </div>
 </div>

@@ -47,6 +47,9 @@ $fields = (string) ob_get_clean();
 <div class="be-modal__header">
     <h2 class="be-modal__title">Dateien hochladen</h2>
 </div>
+<?php // The fixed row (ADR-049): the upload itself has no submit — the component sends each
+      // file as it is chosen — so the row holds only the close. ?>
+<?= $this->partial('partials/modalActions', ['submit' => '', 'cancel' => 'Schliessen'], 'Z77\Shared') ?>
 <div class="be-modal__body">
     <?php if ($targetDelivery === 'public'): ?>
     <?php // The consequence, stated before the file is chosen: inside a public partition
@@ -62,7 +65,4 @@ $fields = (string) ob_get_clean();
         'fields' => $fields,
         'extra'  => 'dms-poster',
     ], 'Z77\Shared') ?>
-</div>
-<div class="be-modal__footer">
-    <button type="button" class="be-btn be-btn--ghost" data-popup-close>Schliessen</button>
 </div>

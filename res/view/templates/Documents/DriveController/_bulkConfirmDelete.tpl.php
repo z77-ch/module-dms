@@ -26,8 +26,5 @@
         </ul>
         <p style="font-size:.8rem;color:var(--be-muted,#94a3b8)">Die Dokumente wandern in den Papierkorb (wiederherstellbar); die Dateien bleiben erhalten. Endgültiges Löschen erfolgt dort.</p>
     </div>
-    <div class="be-modal__footer">
-        <button type="button" class="be-btn be-btn--ghost" data-popup-close>Abbrechen</button>
-        <button type="submit" class="be-btn be-btn--danger">Löschen</button>
-    </div>
+    <?= $this->partial('partials/modalActions', ['submit' => 'Löschen', 'kind' => 'danger', 'end' => true], 'Z77\\Shared') ?>
 </form>

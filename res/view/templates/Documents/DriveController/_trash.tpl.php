@@ -5,11 +5,22 @@
  * ({@see DriveController::trashAction}), which applies the op and re-renders this panel
  * into the popup. Purge respects `retentionUntil`; restore needs the original folder.
  *
+ * Action row (ADR-049 revision 2026-10-10, DMS-FORM-ACTIONS-001): «Papierkorb leeren …» and
+ * «Schliessen» stand in ONE row under the header. Emptying acts on the whole COLLECTION, so it
+ * is the modal's action, not a row's; it opens the confirm step `_trashConfirmPurge` (a GET of
+ * the same panel with `confirm=purge-all`) — irreversible, so never one click. Per-row
+ * «Wiederherstellen» / «Endgültig löschen» stay row-bound (they act on that one document).
+ *
  * @var list<array{id:int, name:string, deletedAt:?string, entityCsrf:string}> $items
+ * @var string $trashUrl  this panel's own address (selection query included)
  */
+$purgeConfirmUrl = $trashUrl . (str_contains($trashUrl, '?') ? '&' : '?') . 'confirm=purge-all';
+$extra = $items === [] ? '' : '<button type="button" class="be-btn be-btn--danger" data-fetch-get="'
+    . e($purgeConfirmUrl) . '">Papierkorb leeren …</button>';
 ?>
 <div class="dms-trash">
     <div class="be-modal__header"><h2 class="be-modal__title">Papierkorb</h2></div>
+    <?= $this->partial('partials/modalActions', ['submit' => '', 'cancel' => 'Schliessen', 'extra' => $extra], 'Z77\\Shared') ?>
     <div class="be-modal__body">
         <?php if ($items === []): ?>
         <p style="font-size:.85rem;color:var(--be-muted,#94a3b8);margin:0">Der Papierkorb ist leer.</p>
@@ -37,22 +48,6 @@
             </div>
             <?php endforeach; ?>
         </div>
-        <?php /* Empty the whole trash — irreversible, so the submit hides behind a
-                 JS-free <details> confirm step. Retention-blocked documents survive
-                 the purge loop and stay listed (the flash reports them). */ ?>
-        <details style="margin-top:.8rem">
-            <summary style="cursor:pointer;font-size:.85rem;color:var(--be-danger,#dc2626)">Papierkorb leeren …</summary>
-            <div style="display:flex;align-items:center;gap:.6rem;margin-top:.5rem">
-                <span style="flex:1;font-size:.8rem;color:var(--be-muted,#94a3b8)">Alle Dokumente endgültig löschen — unwiderruflich. Laufende Aufbewahrungsfristen bleiben erhalten.</span>
-                <form data-fetch-post style="margin:0">
-                    <input type="hidden" name="op" value="purgeAll">
-                    <button type="submit" class="be-btn be-btn--danger">Endgültig löschen</button>
-                </form>
-            </div>
-        </details>
         <?php endif; ?>
-    </div>
-    <div class="be-modal__footer">
-        <button type="button" class="be-btn be-btn--ghost" data-popup-close>Schliessen</button>
     </div>
 </div>

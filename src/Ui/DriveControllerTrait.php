@@ -1091,7 +1091,26 @@ trait DriveControllerTrait
             }
         }
 
-        $response = $this->html(['items' => $this->trashRows()]);
+        // The panel's own address, selection included and `confirm` left out: the action row's
+        // «Papierkorb leeren …» and the confirm step's «Zurück» lead back to it, whichever URL
+        // this request came through (DMS-FORM-ACTIONS-001).
+        $trashQuery = http_build_query(array_filter([
+            'folder' => (int) DI::getRequest()->getGetParameter('folder') ?: null,
+            'doc'    => (int) DI::getRequest()->getGetParameter('doc') ?: null,
+        ]));
+        $trashUrl = $this->groupBase() . '/drive/trash' . ($trashQuery !== '' ? '?' . $trashQuery : '');
+        $items    = $this->trashRows();
+
+        // «Papierkorb leeren …» opens a confirm step first (GET only — the POST of that step
+        // carries `op=purgeAll` and lands in the branch above). An empty trash has nothing
+        // to confirm: the panel again.
+        if (!DI::getRequest()->isPost() && DI::getRequest()->getGetParameter('confirm') === 'purge-all' && $items !== []) {
+            $response = $this->html(['count' => count($items), 'trashUrl' => $trashUrl]);
+            $this->layoutManager->addPartials('_trashConfirmPurge', 'Documents/DriveController', self::DMS_NS);
+            return $response;
+        }
+
+        $response = $this->html(['items' => $items, 'trashUrl' => $trashUrl]);
         $this->layoutManager->addPartials('_trash', 'Documents/DriveController', self::DMS_NS);
 
         if ($mutated) {

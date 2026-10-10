@@ -15,6 +15,7 @@
 <form data-fetch-post="<?= e($postUrl) ?>">
     <input type="hidden" name="ids" value="<?= e($idsCsv) ?>">
     <div class="be-modal__header"><h2 class="be-modal__title"><?= e($countLabel) ?> verschieben</h2></div>
+    <?= $this->partial('partials/modalActions', ['submit' => 'Verschieben'], 'Z77\\Shared') ?>
     <div class="be-modal__body">
         <ul style="max-height:10rem;overflow-y:auto;margin:0 0 .8rem;padding:0 0 0 1.1rem;font-size:.85rem">
             <?php foreach ($names as $name): ?>
@@ -31,9 +32,5 @@
                 </select>
             </div>
         </div>
-    </div>
-    <div class="be-modal__footer">
-        <button type="button" class="be-btn be-btn--ghost" data-popup-close>Abbrechen</button>
-        <button type="submit" class="be-btn be-btn--primary">Verschieben</button>
     </div>
 </form>

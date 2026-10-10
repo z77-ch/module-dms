@@ -25,6 +25,7 @@ $hasParent = isset($parent) && $parent !== null;
             <?php endif; ?>
         </h2>
     </div>
+    <?= $this->partial('partials/modalActions', ['submit' => 'Speichern'], 'Z77\\Shared') ?>
     <div class="be-modal__body">
         <div class="be-form__grid" style="grid-template-columns:1fr">
             <div class="be-form__field" data-z77-field-wrapper>
@@ -33,9 +34,5 @@ $hasParent = isset($parent) && $parent !== null;
                        placeholder="z.B. Rechnungen" autofocus>
             </div>
         </div>
-    </div>
-    <div class="be-modal__footer">
-        <button type="button" class="be-btn be-btn--ghost" data-popup-close>Abbrechen</button>
-        <button type="submit" class="be-btn be-btn--primary">Speichern</button>
     </div>
 </form>

@@ -1,5 +1,7 @@
 <?php
 /**
+ * A field-less confirm (ADR-049 revision 2026-10-10): its bar stays at the bottom (`end`).
+ *
  * @var \Z77\Module\Dms\Entities\Folder|null $folder
  * @var string $entityCsrf
  * @var string|null $blockReason
@@ -7,9 +9,7 @@
  */
 if ($folder === null): ?>
 <div class="be-modal__body"><p>Ordner nicht gefunden.</p></div>
-<div class="be-modal__footer">
-    <button type="button" class="be-btn be-btn--ghost" data-popup-close>Schliessen</button>
-</div>
+<?= $this->partial('partials/modalActions', ['submit' => '', 'cancel' => 'Schliessen', 'end' => true], 'Z77\\Shared') ?>
 <?php return; endif; ?>
 
 <?php if ($blockReason !== null): ?>
@@ -17,9 +17,7 @@ if ($folder === null): ?>
 <div class="be-modal__body">
     <div class="be-modal__alert be-modal__alert--error"><?= e($blockReason) ?></div>
 </div>
-<div class="be-modal__footer">
-    <button type="button" class="be-btn be-btn--ghost" data-popup-close>Schliessen</button>
-</div>
+<?= $this->partial('partials/modalActions', ['submit' => '', 'cancel' => 'Schliessen', 'end' => true], 'Z77\\Shared') ?>
 <?php return; endif; ?>
 
 <form data-fetch-post="<?= e($removeUrl ?? $base . '/folder/remove') ?>">
@@ -29,8 +27,5 @@ if ($folder === null): ?>
     <div class="be-modal__body">
         <p>«<?= e($folder->getName()) ?>» wirklich löschen?</p>
     </div>
-    <div class="be-modal__footer">
-        <button type="button" class="be-btn be-btn--ghost" data-popup-close>Abbrechen</button>
-        <button type="submit" class="be-btn be-btn--danger">Löschen</button>
-    </div>
+    <?= $this->partial('partials/modalActions', ['submit' => 'Löschen', 'kind' => 'danger', 'end' => true], 'Z77\\Shared') ?>
 </form>

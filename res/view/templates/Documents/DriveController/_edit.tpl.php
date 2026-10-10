@@ -7,6 +7,14 @@
  * re-mount), so rules are managed without closing. The lock flags are PRESENTATION — the
  * domain gates (`FolderService`/`DocumentService`, ADR-021) are authoritative.
  *
+ * Layout (ADR-049 revision 2026-10-10, DMS-FORM-ACTIONS-001): ONE action row for the whole
+ * modal, directly under the header — never between the fields and the ACL section. The root
+ * `.dms-edit` is the popup's flex column (`_modal.scss`: `.z77-popup__body > *`), so its
+ * DIRECT children must be header, action row, body — no `<form>` around them. The save form
+ * therefore lives inside the body and the row's «Speichern» submits it through `form="…"`
+ * (still the first submit in document order → Enter saves). The ACL forms are separate forms
+ * below the fields in the same body; HTML forms cannot nest.
+ *
  * @var 'document'|'folder' $type
  * @var int     $id
  * @var string  $name
@@ -37,15 +45,17 @@ $modes = [
 ];
 $own       = $ownMode ?? '';
 $nameField = $type === 'folder' ? 'name' : 'display_name';
+$formId    = 'dms-edit-' . $type . '-' . (int) $id;
 ?>
 <div class="dms-edit">
-    <form data-fetch-post>
-        <input type="hidden" name="entity_csrf" value="<?= e($entityCsrf) ?>">
-        <input type="hidden" name="op" value="save">
-        <div class="be-modal__header">
-            <h2 class="be-modal__title"><?= $type === 'folder' ? 'Ordner' : 'Dokument' ?> bearbeiten — «<?= e($name) ?>»</h2>
-        </div>
-        <div class="be-modal__body">
+    <div class="be-modal__header">
+        <h2 class="be-modal__title"><?= $type === 'folder' ? 'Ordner' : 'Dokument' ?> bearbeiten — «<?= e($name) ?>»</h2>
+    </div>
+    <?= $this->partial('partials/modalActions', ['submit' => 'Speichern', 'submitAttrs' => ['form' => $formId]], 'Z77\\Shared') ?>
+    <div class="be-modal__body">
+        <form id="<?= e($formId) ?>" data-fetch-post style="margin:0">
+            <input type="hidden" name="entity_csrf" value="<?= e($entityCsrf) ?>">
+            <input type="hidden" name="op" value="save">
             <div class="be-form__grid" style="grid-template-columns:1fr">
                 <div class="be-form__field" data-z77-field-wrapper>
                     <label><?= $type === 'folder' ? 'Ordnername' : 'Anzeigename' ?></label>
@@ -138,14 +148,9 @@ $nameField = $type === 'folder' ? 'name' : 'display_name';
                 Auslieferungs-Modus: fest (Vererbungs-Standard des Drive-Root).
             </p>
             <?php endif; ?>
-        </div>
-        <div class="be-modal__footer">
-            <button type="button" class="be-btn be-btn--ghost" data-popup-close>Abbrechen</button>
-            <button type="submit" class="be-btn be-btn--primary">Speichern</button>
-        </div>
-    </form>
+        </form>
 
-    <div class="be-modal__body">
+        <hr style="border:none;border-top:1px solid var(--be-border,#334155);margin:.75rem 0">
         <p style="font-size:.85rem;margin:0 0 .4rem"><strong>Zugriffsrechte</strong></p>
         <?php if ($effectiveMode !== 'protected'): ?>
         <div class="be-modal__alert">
@@ -154,6 +159,7 @@ $nameField = $type === 'folder' ? 'name' : 'display_name';
         </div>
         <?php endif; ?>
 
+        <?php /* Per-rule «Entfernen» stays row-bound: it acts on that one rule (ADR-033). */ ?>
         <div class="dms-acl__list" style="display:flex;flex-direction:column;gap:.35rem;margin:.5rem 0">
             <?php if ($aces === []): ?>
             <p style="font-size:.85rem;color:var(--be-muted,#94a3b8);margin:0">Noch keine Regeln.</p>
@@ -172,22 +178,25 @@ $nameField = $type === 'folder' ? 'name' : 'display_name';
             <?php endforeach; endif; ?>
         </div>
 
-        <form data-fetch-post style="margin:0">
+        <?php /* «Recht hinzufügen» as a one-line capture: the fields and their button in ONE
+                 row, like a list's add line — the button belongs to these three fields, not to
+                 the modal, so it is not in the action row above. */ ?>
+        <form class="dms-acl__grant" data-fetch-post style="margin:0">
             <input type="hidden" name="entity_csrf" value="<?= e($entityCsrf) ?>">
             <input type="hidden" name="op"           value="grant">
-            <div class="be-form__grid" style="grid-template-columns:auto 1fr auto;gap:.4rem;align-items:center">
-                <select name="subject_type">
+            <div style="display:grid;grid-template-columns:auto minmax(8rem,1fr) auto auto;gap:.4rem;align-items:center">
+                <select name="subject_type" aria-label="Art">
                     <option value="role">Rolle</option>
                     <option value="user">Benutzer-ID</option>
                 </select>
-                <input type="text" name="subject" placeholder="member / visitor oder Benutzer-ID" required>
-                <select name="rights">
+                <input type="text" name="subject" placeholder="member / visitor oder Benutzer-ID" aria-label="Rolle oder Benutzer-ID" required>
+                <select name="rights" aria-label="Recht">
                     <?php foreach ($rightsList as $val => $label): ?>
                     <option value="<?= e($val) ?>"><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <button type="submit" class="be-btn be-btn--primary">Recht hinzufügen</button>
             </div>
-            <div style="margin-top:.5rem"><button type="submit" class="be-btn be-btn--primary">Recht hinzufügen</button></div>
         </form>
     </div>
 </div>

@@ -14,6 +14,7 @@ $current = $folder->getParentId();
     <input type="hidden" name="id"          value="<?= (int) $folder->getId() ?>">
     <input type="hidden" name="entity_csrf" value="<?= e($entityCsrf) ?>">
     <div class="be-modal__header"><h2 class="be-modal__title">Ordner verschieben</h2></div>
+    <?= $this->partial('partials/modalActions', ['submit' => 'Verschieben'], 'Z77\\Shared') ?>
     <div class="be-modal__body">
         <div class="be-form__grid" style="grid-template-columns:1fr">
             <div class="be-form__field" data-z77-field-wrapper>
@@ -26,9 +27,5 @@ $current = $folder->getParentId();
                 </select>
             </div>
         </div>
-    </div>
-    <div class="be-modal__footer">
-        <button type="button" class="be-btn be-btn--ghost" data-popup-close>Abbrechen</button>
-        <button type="submit" class="be-btn be-btn--primary">Verschieben</button>
     </div>
 </form>
