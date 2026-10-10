@@ -67,10 +67,14 @@ final class GdImageProcessor implements ImageProcessor
                     height: $destH,
                     ext: $ext,
                 );
-                imagedestroy($dst);
+                // Free each variant's pixels before the next one. A GdImage is an object since
+                // PHP 8.0 and is freed when its last reference goes; `imagedestroy()` has no
+                // effect and is DEPRECATED in 8.5 — in dev mode its notice printed HTML before
+                // the upload's JSON and every upload looked failed (DMS-GD-DEPRECATION-001).
+                unset($dst);
             }
         } finally {
-            imagedestroy($src);
+            unset($src);
         }
 
         return $out;
