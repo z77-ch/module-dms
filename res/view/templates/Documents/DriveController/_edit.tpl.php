@@ -53,16 +53,16 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
     </div>
     <?= $this->partial('partials/modalActions', ['submit' => 'Speichern', 'submitAttrs' => ['form' => $formId]], 'Z77\\Shared') ?>
     <div class="be-modal__body">
-        <form id="<?= e($formId) ?>" data-fetch-post style="margin:0">
+        <form id="<?= e($formId) ?>" data-fetch-post>
             <input type="hidden" name="entity_csrf" value="<?= e($entityCsrf) ?>">
             <input type="hidden" name="op" value="save">
-            <div class="be-form__grid" style="grid-template-columns:1fr">
+            <div class="be-form__grid be-form__grid--single">
                 <div class="be-form__field" data-z77-field-wrapper>
                     <label><?= $type === 'folder' ? 'Ordnername' : 'Anzeigename' ?></label>
                     <?php if ($nameLocked): ?>
                     <input type="hidden" name="<?= e($nameField) ?>" value="<?= e($name) ?>">
                     <input type="text" value="<?= e($name) ?>" disabled>
-                    <p style="font-size:.8rem;color:var(--be-muted,#94a3b8);margin:.2rem 0 0">
+                    <p class="be-form__hint">
                         Der Name ist gesperrt (System-Ordner oder Bereichs-Verwaltung — nur Super-User).
                     </p>
                     <?php else: ?>
@@ -71,7 +71,7 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
                 </div>
 
                 <?php if ($type === 'document' && $originalName !== null): ?>
-                <p style="font-size:.8rem;color:var(--be-muted,#94a3b8);margin:0">
+                <p class="be-form__hint">
                     Originaldatei: <code><?= e($originalName) ?></code>
                 </p>
                 <?php endif; ?>
@@ -81,12 +81,12 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
                     <label>Key <small>(stabile Adresse für Module / Nav-Einträge; leer = keiner)</small></label>
                     <input type="text" name="key" value="<?= e($key ?? '') ?>" autocomplete="off"
                            pattern="[a-z0-9][a-z0-9-]*" placeholder="z.B. financial">
-                    <p style="font-size:.8rem;color:var(--be-muted,#94a3b8);margin:.2rem 0 0">
+                    <p class="be-form__hint">
                         Nur Kleinbuchstaben/Ziffern/Bindestrich, muss eindeutig sein.
                     </p>
                 </div>
                 <?php elseif ($type === 'folder' && $key !== null): ?>
-                <p style="font-size:.8rem;color:var(--be-muted,#94a3b8);margin:0">
+                <p class="be-form__hint">
                     Key: <code><?= e($key) ?></code> (fest — Modul-Adresse)
                 </p>
                 <?php endif; ?>
@@ -100,7 +100,7 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
                         <option value="<?= e($p) ?>"<?= ($ownProfile ?? null) === $p ? ' selected' : '' ?>><?= e($p) ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <p style="font-size:.8rem;color:var(--be-muted,#94a3b8);margin:.2rem 0 0">
+                    <p class="be-form__hint">
                         Ohne Zuordnung greift das Profil «default» des Bereichs (falls definiert), sonst nur die Standard-Grössen.
                     </p>
                 </div>
@@ -108,10 +108,10 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
             </div>
 
             <?php if ($type === 'document' && ($isImage ?? false) && ($languages ?? [])): ?>
-            <hr style="border:none;border-top:1px solid var(--be-border,#334155);margin:.75rem 0">
-            <p style="font-size:.85rem;margin:0 0 .4rem"><strong>Bildtexte</strong>
-                <span style="color:var(--be-muted,#94a3b8)">— Alt (Barrierefreiheit/SEO) &amp; Bildunterschrift, je Sprache</span></p>
-            <div class="be-form__grid" style="grid-template-columns:1fr">
+            <hr class="be-form__divider">
+            <p class="be-form__section">Bildtexte</p>
+            <p class="be-form__hint">Alt (Barrierefreiheit/SEO) &amp; Bildunterschrift, je Sprache</p>
+            <div class="be-form__grid be-form__grid--single">
                 <?php foreach (($languages ?? []) as $lang): ?>
                 <div class="be-form__field" data-z77-field-wrapper>
                     <label>Alt-Text <small>(<?= e(strtoupper($lang)) ?>)</small></label>
@@ -126,32 +126,32 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
             <?php endif; ?>
 
             <?php if (!$modeLocked): ?>
-            <hr style="border:none;border-top:1px solid var(--be-border,#334155);margin:.75rem 0">
-            <p style="font-size:.85rem;margin:0 0 .4rem"><strong>Auslieferungs-Modus</strong>
-                <span style="color:var(--be-muted,#94a3b8)">— effektiv aktuell: <?= e($effectiveMode) ?></span></p>
+            <hr class="be-form__divider">
+            <p class="be-form__section">Auslieferungs-Modus</p>
+            <p class="be-form__hint">Effektiv aktuell: <?= e($effectiveMode) ?></p>
             <?php if ($sealedAbove): ?>
             <div class="be-modal__alert be-modal__alert--error">
                 Ein übergeordneter Ordner ist <strong>versiegelt</strong> — offenere Modi sind gesperrt.
             </div>
             <?php endif; ?>
-            <div style="display:flex;flex-direction:column;gap:.35rem">
+            <div class="be-form__stack">
                 <?php foreach ($modes as $val => $label):
                     $disabled = $sealedAbove && ($val === 'protected' || $val === 'public'); ?>
-                <label class="be-choice be-choice--filled"<?= $disabled ? ' style="opacity:.5"' : '' ?>>
+                <label class="be-choice be-choice--filled">
                     <input type="radio" class="be-choice__input" name="mode" value="<?= e($val) ?>"<?= $own === $val ? ' checked' : '' ?><?= $disabled ? ' disabled' : '' ?>>
                     <span class="be-choice__label"><?= e($label) ?></span>
                 </label>
                 <?php endforeach; ?>
             </div>
             <?php else: ?>
-            <p style="font-size:.8rem;color:var(--be-muted,#94a3b8);margin:.5rem 0 0">
+            <p class="be-form__hint">
                 Auslieferungs-Modus: fest (Vererbungs-Standard des Drive-Root).
             </p>
             <?php endif; ?>
         </form>
 
-        <hr style="border:none;border-top:1px solid var(--be-border,#334155);margin:.75rem 0">
-        <p style="font-size:.85rem;margin:0 0 .4rem"><strong>Zugriffsrechte</strong></p>
+        <hr class="be-form__divider">
+        <p class="be-form__section">Zugriffsrechte</p>
         <?php if ($effectiveMode !== 'protected'): ?>
         <div class="be-modal__alert">
             Regeln greifen nur im Modus «protected» (aktuell: <strong><?= e($effectiveMode) ?></strong>).
@@ -160,14 +160,14 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
         <?php endif; ?>
 
         <?php /* Per-rule «Entfernen» stays row-bound: it acts on that one rule (ADR-033). */ ?>
-        <div class="dms-acl__list" style="display:flex;flex-direction:column;gap:.35rem;margin:.5rem 0">
+        <div class="be-modal__rows dms-acl__list">
             <?php if ($aces === []): ?>
-            <p style="font-size:.85rem;color:var(--be-muted,#94a3b8);margin:0">Noch keine Regeln.</p>
+            <p class="be-form__hint">Noch keine Regeln.</p>
             <?php else: foreach ($aces as $a): ?>
-            <div class="dms-acl__row" style="display:flex;align-items:center;gap:.5rem">
-                <span style="flex:1"><?= $a['subjectType'] === 'role' ? 'Rolle' : 'Benutzer' ?>:
+            <div class="be-modal__row dms-acl__row">
+                <span class="be-modal__row-main"><?= $a['subjectType'] === 'role' ? 'Rolle' : 'Benutzer' ?>:
                     <strong><?= e($a['subjectId']) ?></strong> — <?= e($rightsList[$a['rights']] ?? $a['rights']) ?></span>
-                <form data-fetch-post style="margin:0">
+                <form data-fetch-post>
                     <input type="hidden" name="entity_csrf" value="<?= e($entityCsrf) ?>">
                     <input type="hidden" name="op"           value="revoke">
                     <input type="hidden" name="subject_type" value="<?= e($a['subjectType']) ?>">
@@ -181,16 +181,16 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
         <?php /* «Recht hinzufügen» as a one-line capture: the fields and their button in ONE
                  row, like a list's add line — the button belongs to these three fields, not to
                  the modal, so it is not in the action row above. */ ?>
-        <form class="dms-acl__grant" data-fetch-post style="margin:0">
+        <form class="dms-acl__grant" data-fetch-post>
             <input type="hidden" name="entity_csrf" value="<?= e($entityCsrf) ?>">
             <input type="hidden" name="op"           value="grant">
-            <div style="display:grid;grid-template-columns:auto minmax(8rem,1fr) auto auto;gap:.4rem;align-items:center">
-                <select name="subject_type" aria-label="Art">
+            <div class="be-form__row" style="--be-form-cols: auto minmax(8rem, 1fr) auto auto">
+                <select class="be-input" name="subject_type" aria-label="Art">
                     <option value="role">Rolle</option>
                     <option value="user">Benutzer-ID</option>
                 </select>
-                <input type="text" name="subject" placeholder="member / visitor oder Benutzer-ID" aria-label="Rolle oder Benutzer-ID" required>
-                <select name="rights" aria-label="Recht">
+                <input class="be-input" type="text" name="subject" placeholder="member / visitor oder Benutzer-ID" aria-label="Rolle oder Benutzer-ID" required>
+                <select class="be-input" name="rights" aria-label="Recht">
                     <?php foreach ($rightsList as $val => $label): ?>
                     <option value="<?= e($val) ?>"><?= e($label) ?></option>
                     <?php endforeach; ?>

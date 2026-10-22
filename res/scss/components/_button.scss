@@ -4,11 +4,11 @@
     display:         inline-flex;
     align-items:     center;
     gap:             var(--dms-space-2);
-    padding:         var(--dms-space-2) var(--dms-space-4);
+    padding:         var(--dms-control-padding-y) var(--dms-control-padding-x);
     border:          1px solid transparent;
-    border-radius:   var(--dms-radius-md);
-    font-size:       var(--dms-font-size-sm);
-    font-weight:     var(--dms-font-weight-semibold);
+    border-radius:   var(--dms-control-radius);
+    font-size:       var(--dms-control-font-size);
+    font-weight:     var(--dms-control-font-weight);
     line-height:     var(--dms-line-height-tight);
     white-space:     nowrap;
     cursor:          pointer;

@@ -21,11 +21,11 @@
  */
 ob_start();
 ?>
-<div class="be-form__grid" style="grid-template-columns:1fr">
+<div class="be-form__grid be-form__grid--single">
     <div class="be-form__field" data-z77-field-wrapper>
         <label for="dms-upload-folder">Zielordner</label>
         <?php if ($folderOptions === []): ?>
-        <p style="font-size:.85rem;color:var(--be-muted,#94a3b8);margin:0">Es gibt noch keinen Ordner — bitte zuerst einen Ordner anlegen. Dokumente werden immer in einem Ordner abgelegt.</p>
+        <p class="be-form__hint">Es gibt noch keinen Ordner — bitte zuerst einen Ordner anlegen. Dokumente werden immer in einem Ordner abgelegt.</p>
         <?php else: ?>
         <select id="dms-upload-folder" name="folder_id" required>
             <?php foreach ($folderOptions as $opt): ?>
@@ -35,9 +35,10 @@ ob_start();
         <?php endif; ?>
     </div>
     <div class="be-form__field" data-z77-field-wrapper>
-        <label style="display:flex;align-items:center;gap:.5rem;font-weight:normal">
-            <input type="checkbox" name="show_original" value="1">
-            Originalbild unverändert ausliefern (nur Thumbnail generieren)
+        <label class="be-switch">
+            <input type="checkbox" class="be-switch__input" name="show_original" value="1">
+            <span class="be-switch__track"><span class="be-switch__thumb"></span></span>
+            <span class="be-switch__label">Originalbild unverändert ausliefern (nur Thumbnail generieren)</span>
         </label>
     </div>
 </div>
@@ -54,7 +55,7 @@ $fields = (string) ob_get_clean();
     <?php if ($targetDelivery === 'public'): ?>
     <?php // The consequence, stated before the file is chosen: inside a public partition
           // every upload is world-readable via /media (ADR-017 inheritance). ?>
-    <p style="font-size:.78rem;color:#f59e0b;margin:0 0 .75rem">
+    <p class="be-form__hint be-form__hint--warn">
         <strong>Zielordner liefert öffentlich aus.</strong> Was hier landet, ist ohne
         Anmeldung über <code>/media</code> erreichbar — auch für Suchmaschinen.
     </p>

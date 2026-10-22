@@ -23,23 +23,23 @@ $extra = $items === [] ? '' : '<button type="button" class="be-btn be-btn--dange
     <?= $this->partial('partials/modalActions', ['submit' => '', 'cancel' => 'Schliessen', 'extra' => $extra], 'Z77\\Shared') ?>
     <div class="be-modal__body">
         <?php if ($items === []): ?>
-        <p style="font-size:.85rem;color:var(--be-muted,#94a3b8);margin:0">Der Papierkorb ist leer.</p>
+        <p class="be-list__empty">Der Papierkorb ist leer.</p>
         <?php else: ?>
-        <p style="font-size:.8rem;color:var(--be-muted,#94a3b8);margin:0 0 .6rem">Gelöschte Dokumente bleiben erhalten (Aufbewahrung). Wiederherstellen legt sie zurück in den Ordner; endgültiges Löschen entfernt Datei + Eintrag unwiderruflich.</p>
-        <div style="display:flex;flex-direction:column;gap:.4rem">
+        <p class="be-form__hint">Gelöschte Dokumente bleiben erhalten (Aufbewahrung). Wiederherstellen legt sie zurück in den Ordner; endgültiges Löschen entfernt Datei + Eintrag unwiderruflich.</p>
+        <div class="be-modal__rows">
             <?php foreach ($items as $it): ?>
-            <div style="display:flex;align-items:center;gap:.5rem">
-                <span style="flex:1;min-width:0">
-                    <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($it['name']) ?></span>
-                    <small style="color:var(--be-muted,#94a3b8)">gelöscht <?= e(substr((string) $it['deletedAt'], 0, 10)) ?></small>
+            <div class="be-modal__row">
+                <span class="be-modal__row-main">
+                    <span class="be-modal__row-name"><?= e($it['name']) ?></span>
+                    <small class="be-modal__row-meta">gelöscht <?= e(substr((string) $it['deletedAt'], 0, 10)) ?></small>
                 </span>
-                <form data-fetch-post style="margin:0">
+                <form data-fetch-post>
                     <input type="hidden" name="entity_csrf" value="<?= e($it['entityCsrf']) ?>">
                     <input type="hidden" name="op"          value="restore">
                     <input type="hidden" name="id"          value="<?= (int) $it['id'] ?>">
                     <button type="submit" class="be-btn be-btn--ghost">Wiederherstellen</button>
                 </form>
-                <form data-fetch-post style="margin:0">
+                <form data-fetch-post>
                     <input type="hidden" name="entity_csrf" value="<?= e($it['entityCsrf']) ?>">
                     <input type="hidden" name="op"          value="purge">
                     <input type="hidden" name="id"          value="<?= (int) $it['id'] ?>">

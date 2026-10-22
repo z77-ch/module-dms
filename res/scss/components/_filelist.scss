@@ -39,18 +39,45 @@
 .dms-filelist-bulkbar__spacer { flex: 1; }
 
 .dms-file__select {
-    /* The backend host's normalize strips `appearance` from ALL form controls
-       (module-backend _normalize.scss) — without restoring it the native checkbox
-       paints nothing at all (same trap as the backend selects, _forms.scss). */
-    appearance:   auto;
-    flex-shrink:  0;
-    width:        1rem;
-    height:       1rem;
-    margin:       0;
-    accent-color: var(--dms-accent);
-    cursor:       pointer;
-    opacity:      0;
-    transition:   opacity var(--dms-transition-fast);
+    /* The selection box is DRAWN, not native: the backend's selection control
+       (`.be-choice__input`) is a box that fills with the accent and a check mark, and
+       the Drive takes the same look (css-backend.md, consistency audit 2026-10-16
+       point 3). Drawn here with the fragment's OWN tokens — a backend class in the
+       fragment would break every other host (ADR-018 rule 3). `appearance: none` is
+       stated explicitly: a host whose normalize does not strip it would otherwise
+       paint the native box under the drawn one. */
+    appearance:         none;
+    -webkit-appearance: none;
+    display:       grid;
+    place-content: center;
+    flex-shrink:   0;
+    width:         1rem;
+    height:        1rem;
+    margin:        0;
+    border:        1px solid var(--dms-line-strong);
+    border-radius: var(--dms-radius-sm);
+    background:    var(--dms-elevated);
+    cursor:        pointer;
+    opacity:       0;
+    transition:    opacity var(--dms-transition-fast), background var(--dms-transition-fast), border-color var(--dms-transition-fast);
+}
+.dms-file__select::after {
+    content:     "\2713"; // check — shown when selected
+    font-size:   var(--dms-font-size-xs);
+    font-weight: var(--dms-font-weight-bold);
+    line-height: 1;
+    color:       var(--dms-on-accent);
+    opacity:     0;
+}
+.dms-file__select:hover { border-color: var(--dms-accent); }
+.dms-file__select:checked {
+    background:   var(--dms-accent);
+    border-color: var(--dms-accent);
+}
+.dms-file__select:checked::after { opacity: 1; }
+.dms-file__select:focus-visible {
+    outline:    none;
+    box-shadow: 0 0 0 2px var(--dms-focus-ring);
 }
 .dms-file:hover .dms-file__select,
 .dms-file__select:checked,

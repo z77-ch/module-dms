@@ -20,6 +20,15 @@
     --dms-transition-base: 250ms ease;
     --dms-transition-slow: 400ms ease;
 
+    /* Controls — the geometry of a labelled button (`.dms-btn`). Its own scale by default; a
+       host that wants the Drive's controls to look like its own binds these (the backend does,
+       `_dms-host.scss` — one look per kind of control, css-backend.md audit point 5). */
+    --dms-control-padding-y:   var(--dms-space-2);
+    --dms-control-padding-x:   var(--dms-space-4);
+    --dms-control-radius:      var(--dms-radius-md);
+    --dms-control-font-size:   var(--dms-font-size-sm);
+    --dms-control-font-weight: var(--dms-font-weight-semibold);
+
     /* Z-index lanes (fragment-internal; kept below host global flash/messages) */
     --dms-z-base:     1;
     --dms-z-dropdown: 100;
