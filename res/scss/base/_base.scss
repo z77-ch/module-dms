@@ -62,4 +62,5 @@
     font-size:       1.05rem;
     line-height:     1;
 }
-.dms-rowmenu:hover { color: var(--dms-accent); background: var(--dms-surface-alt); }
+.dms-rowmenu:hover,
+.dms-rowmenu[aria-expanded="true"] { color: var(--dms-accent); background: var(--dms-surface-alt); }   /* its context menu is open (core.js) */

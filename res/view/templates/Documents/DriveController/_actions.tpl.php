@@ -1,9 +1,14 @@
 <?php
 /**
- * DMS Drive — per-row action hub (R6c). Opened by the `⋮` in the tree (folders) / list
- * (documents). Launches the specific modals via `data-fetch-get` (core-wired on popup
- * show, so a click replaces this hub with the target modal) and carries the inline
- * `active` switch (`data-fetch-toggle` → {@see DriveController::actionsAction} `&op=active`).
+ * DMS Drive — per-row context menu (⋮, core.js «context menu», owner 2026-10-22; the R6c hub
+ * was a dialog until then). Opened by the `⋮` in the tree (folders) / list (documents) via
+ * `data-menu-open`. Each item opens its dialog via `data-fetch-get` (core-wired when the menu
+ * opens); the inline `active` switch stays a real switch row (`data-fetch-toggle` →
+ * {@see DriveController::actionsAction} `&op=active`) — toggling it refreshes the panes behind
+ * and keeps the menu open. The delivery hint is a `.be-menu__note` line (`--warn` for public).
+ *
+ * The menu box lives in <body>, OUTSIDE the `.dms` wrapper — like the dialog before it, it
+ * takes the host's look (`.be-menu`, `.be-switch`, `.be-icon`), not `--dms-*` (css-dms.md).
  *
  * @var 'document'|'folder' $type
  * @var int      $id
@@ -28,61 +33,53 @@ $delUrl  = $type === 'folder' ? $drive . 'folder-confirm-delete?id=' . $id : $dr
 // throws on all four — offering the controls anyway only produces errors (DMS-ROOT-001).
 // A subfolder IS offered: a child of the root is a new partition, which is exactly how
 // partitions are created (`FolderService::add`, SUPER_USER-gated).
-// [label, sentence, warns] — a public delivery warns (`.be-form__hint--warn`).
+// [label, sentence, warns] — a public delivery warns (`.be-menu__note--warn`).
 $deliveryInfo = [
     'public'    => ['Öffentlich', 'Inhalte sind ohne Anmeldung über /media erreichbar.', true],
     'protected' => ['Geschützt',  'Nur mit Leserecht — nichts wird öffentlich ausgeliefert.', false],
     'sealed'    => ['Versiegelt', 'Auslieferung für den ganzen Teilbaum gesperrt.', false],
 ][$delivery] ?? null;
+
+// `be-icon` (backend) over the drive page's inline `#i-*` sprite (same document DOM — the
+// menu is only opened from the Drive).
+$ic = fn(string $name) => '<svg class="be-icon" width="15" height="15" aria-hidden="true"><use href="#' . $name . '"/></svg>';
 ?>
-<div class="be-actions dms-actions">
-    <div class="be-modal__header"><h2 class="be-modal__title">Aktionen — «<?= e($name) ?>»</h2></div>
-    <?= $this->partial('partials/modalActions', ['submit' => '', 'cancel' => 'Schliessen'], 'Z77\\Shared') ?>
-    <div class="be-modal__body">
-        <?php if ($isDriveRoot): ?>
-        <p class="be-form__hint">
-            Der Drive ist die Wurzel: sie lässt sich nicht verschieben, nicht löschen und
-            speichert selbst keine Dateien. Unterordner darunter sind die Bereiche.
-        </p>
-        <?php else: ?>
+<div class="be-menu" role="menu" aria-label="Aktionen — «<?= e($name) ?>»">
+    <?php if ($isDriveRoot): ?>
+    <p class="be-menu__note">Der Drive ist die Wurzel: nicht verschiebbar, nicht löschbar, speichert selbst keine Dateien. Unterordner darunter sind die Bereiche.</p>
+    <?php else: ?>
+    <div class="be-menu__switch" role="none">
         <label class="be-switch be-switch--block">
             <span class="be-switch__label">Aktiv <small>ausgeliefert / sichtbar</small></span>
             <input type="checkbox" class="be-switch__input" data-fetch-toggle="<?= e($drive . 'actions' . $q . '&op=active' . $ctx) ?>"<?= $isActive ? ' checked' : '' ?>>
             <span class="be-switch__track"><span class="be-switch__thumb"></span></span>
         </label>
-        <?php endif; ?>
-
-        <?php if ($deliveryInfo !== null): ?>
-        <p class="be-form__hint<?= $deliveryInfo[2] ? ' be-form__hint--warn' : '' ?>">
-            <strong>Auslieferung: <?= e($deliveryInfo[0]) ?></strong> — <?= e($deliveryInfo[1]) ?>
-            <?php if ($delivery === 'public'): ?>
-            <br>Gilt geerbt für alles darunter, solange kein Unterordner es enger setzt.
-            <?php endif; ?>
-        </p>
-        <?php endif; ?>
-
-        <?php
-        // `be-icon` (backend, works in the popup) over the drive page's inline `#i-*` sprite
-        // (same document DOM — the hub is only opened from the Drive). Left-aligned rows.
-        $ic = fn(string $name) => '<svg class="be-icon" width="15" height="15" aria-hidden="true"><use href="#' . $name . '"/></svg>';
-        ?>
-        <div class="be-actions__list">
-            <button type="button" class="be-btn be-btn--ghost be-actions__item" data-fetch-get="<?= e($editUrl) ?>"><?= $ic('i-edit') ?> Bearbeiten</button>
-            <?php if (!$isDriveRoot): ?>
-            <button type="button" class="be-btn be-btn--ghost be-actions__item" data-fetch-get="<?= e($moveUrl) ?>"><?= $ic('i-move') ?> Verschieben</button>
-            <?php endif; ?>
-            <?php if ($type === 'folder'): ?>
-            <button type="button" class="be-btn be-btn--ghost be-actions__item" data-fetch-get="<?= e($drive . 'folder-add?parent=' . $id) ?>"><?= $ic('i-folder-plus') ?> <?= $isDriveRoot ? 'Neuer Bereich' : 'Neuer Unterordner' ?></button>
-            <?php if (!$isDriveRoot): ?>
-            <button type="button" class="be-btn be-btn--ghost be-actions__item" data-fetch-get="<?= e($drive . 'add?folder=' . $id) ?>"><?= $ic('i-upload') ?> Datei hochladen</button>
-            <?php endif; ?>
-            <?php else: ?>
-            <a class="be-btn be-btn--ghost be-actions__item" href="<?= e($docBase . 'preview?id=' . $id) ?>" target="_blank" rel="noopener"><?= $ic('i-eye') ?> Öffnen</a>
-            <a class="be-btn be-btn--ghost be-actions__item" href="<?= e($docBase . 'download?id=' . $id) ?>"><?= $ic('i-download') ?> Download</a>
-            <?php endif; ?>
-            <?php if (!$isDriveRoot): ?>
-            <button type="button" class="be-btn be-btn--danger be-actions__item" data-fetch-get="<?= e($delUrl) ?>"><?= $ic('i-trash') ?> Löschen</button>
-            <?php endif; ?>
-        </div>
     </div>
+    <?php endif; ?>
+
+    <?php if ($deliveryInfo !== null): ?>
+    <p class="be-menu__note<?= $deliveryInfo[2] ? ' be-menu__note--warn' : '' ?>">
+        <strong>Auslieferung: <?= e($deliveryInfo[0]) ?></strong> — <?= e($deliveryInfo[1]) ?>
+        <?php if ($delivery === 'public'): ?>
+        Gilt geerbt für alles darunter, solange kein Unterordner es enger setzt.
+        <?php endif; ?>
+    </p>
+    <?php endif; ?>
+
+    <button type="button" class="be-menu__item" role="menuitem" data-fetch-get="<?= e($editUrl) ?>"><?= $ic('i-edit') ?> Bearbeiten</button>
+    <?php if (!$isDriveRoot): ?>
+    <button type="button" class="be-menu__item" role="menuitem" data-fetch-get="<?= e($moveUrl) ?>"><?= $ic('i-move') ?> Verschieben</button>
+    <?php endif; ?>
+    <?php if ($type === 'folder'): ?>
+    <button type="button" class="be-menu__item" role="menuitem" data-fetch-get="<?= e($drive . 'folder-add?parent=' . $id) ?>"><?= $ic('i-folder-plus') ?> <?= $isDriveRoot ? 'Neuer Bereich' : 'Neuer Unterordner' ?></button>
+    <?php if (!$isDriveRoot): ?>
+    <button type="button" class="be-menu__item" role="menuitem" data-fetch-get="<?= e($drive . 'add?folder=' . $id) ?>"><?= $ic('i-upload') ?> Datei hochladen</button>
+    <?php endif; ?>
+    <?php else: ?>
+    <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'preview?id=' . $id) ?>" target="_blank" rel="noopener"><?= $ic('i-eye') ?> Öffnen</a>
+    <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'download?id=' . $id) ?>"><?= $ic('i-download') ?> Download</a>
+    <?php endif; ?>
+    <?php if (!$isDriveRoot): ?>
+    <button type="button" class="be-menu__item be-menu__item--danger" role="menuitem" data-fetch-get="<?= e($delUrl) ?>"><?= $ic('i-trash') ?> Löschen</button>
+    <?php endif; ?>
 </div>

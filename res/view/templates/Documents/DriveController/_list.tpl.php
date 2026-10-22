@@ -61,7 +61,7 @@ $ctx = '&folder=' . ($selectedFolderId ?? '') . '&doc=' . ($selectedDoc ?? '');
           <svg class="dms-icon"><use href="#<?= e($f['icon']) ?>"/></svg>
         <?php endif; ?>
       </span>
-      <button type="button" class="dms-rowmenu" data-modal="<?= $base ?>/drive/actions?type=document&id=<?= (int) $f['id'] . $ctx ?>" title="Aktionen">⋮</button>
+      <button type="button" class="dms-rowmenu" title="Aktionen" aria-haspopup="menu" aria-expanded="false" data-menu-open="<?= $base ?>/drive/actions?type=document&id=<?= (int) $f['id'] . $ctx ?>">⋮</button>
       <?php /* `data-z77-split-open` reveals the preview pane as an overlay while the Drive is
                narrow. On a wide Drive the attribute costs nothing — the pane is visible anyway
                and the open-state attribute has no effect outside the container query. This is

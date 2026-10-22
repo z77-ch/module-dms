@@ -48,7 +48,7 @@ $renderNodes = function (array $nodes, int $depth) use (&$renderNodes, $listUrl,
                 <span class="dms-tree__toggle" aria-hidden="true"></span>
                 <?php endif; ?>
                 <svg class="dms-icon dms-tree__icon"><use href="#i-folder"/></svg>
-                <button type="button" class="dms-rowmenu" data-modal="<?= $base ?>/drive/actions?type=folder&id=<?= (int) $n['id'] . $ctx ?>" title="Aktionen">⋮</button>
+                <button type="button" class="dms-rowmenu" title="Aktionen" aria-haspopup="menu" aria-expanded="false" data-menu-open="<?= $base ?>/drive/actions?type=folder&id=<?= (int) $n['id'] . $ctx ?>">⋮</button>
                 <?php /* `data-z77-split-close`: picking a folder COMPLETES what the nav overlay was
                          opened for, so it shuts on a narrow Drive. Wide, there is no overlay and
                          the attribute does nothing. It does not interfere with the link's own
