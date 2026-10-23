@@ -4,6 +4,8 @@ namespace Z77\Module\Dms\App;
 use Z77\Core\Config\AuthRole;
 
 return [
+    // The Drive answers a `/media/…` path with its file for server-side readers (kernel LocalFiles, 2026-10-23: the mandator logos).
+    'localFileResolvers' => [\Z77\Module\Dms\Files\MediaFileResolver::class],
     'defaultGroup'  => 'media',
     'groupDefaults' => [
         'media' => 'output',

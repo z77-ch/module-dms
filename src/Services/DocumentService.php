@@ -567,6 +567,25 @@ final class DocumentService
     }
 
     /**
+     * The file behind a `/media` path (`media/public/imgs/logo.png`, with or without the leading
+     * slash or a `?v=` key) for server-side reading — only when the document is public and on an
+     * active chain, exactly what `/media` delivers (kernel `LocalFiles`, 2026-10-23). Null otherwise.
+     */
+    public function publicFileForPath(string $path): ?string
+    {
+        $segments = array_values(array_filter(explode('/', (string) strtok(trim($path), '?')), static fn($s) => $s !== ''));
+        if (($segments[0] ?? '') !== 'media') {
+            return null;
+        }
+        $hit = $this->resolve(array_slice($segments, 1));
+        if ($hit === null || $this->effectiveDeliveryMode($hit['document']) !== 'public' || !$this->isActiveChain($hit['document'])) {
+            return null;
+        }
+
+        return $this->blob->path($hit['document']->getId(), $hit['variant'], $this->variantExt($hit['document'], $hit['variant']));
+    }
+
+    /**
      * Resolve a structural `/media` path (ADR-017 §8 / ADR-020) to a document + variant.
      * The leading segments are the folder-slug chain from the tree top — the FIRST segment
      * is the partition-root slug (ADR-020 rule 5; the root is a real folder now, so it is
