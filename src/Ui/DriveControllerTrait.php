@@ -987,6 +987,8 @@ trait DriveControllerTrait
             // property nothing in the Drive showed, although it decides whether the
             // content is world-readable (DMS-DELIVERY-VIS-001).
             'delivery' => $delivery,
+            // A public document's path, copied with one click from the menu (owner 2026-10-23).
+            'publicUrl' => $type === 'document' && $delivery === 'public' ? $this->publicPath($id) : null,
             // Current drive selection, so the inline active switch refreshes that view.
             'folder'   => $this->folderParam(),
             'doc'      => $this->docParam(),
@@ -1002,6 +1004,15 @@ trait DriveControllerTrait
      *
      * @return array{0: ?string, 1: bool, 2: bool, 3: string}
      */
+    /** The `/media` PATH of a document — no host, no `?v=` cache key (owner 2026-10-23: the path is what gets pasted). */
+    private function publicPath(int $id): ?string
+    {
+        $doc = $this->readableDoc($id);
+        $url = $doc !== null ? $this->docService()->publicUrl($doc) : null;
+
+        return $url !== null ? strtok($url, '?') : null;
+    }
+
     private function actionsResource(string $type, int $id): array
     {
         if ($type === 'folder') {

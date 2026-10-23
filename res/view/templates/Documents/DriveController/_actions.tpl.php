@@ -78,6 +78,12 @@ $ic = fn(string $name) => '<svg class="be-icon" width="15" height="15" aria-hidd
     <?php else: ?>
     <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'preview?id=' . $id) ?>" target="_blank" rel="noopener"><?= $ic('i-eye') ?> Öffnen</a>
     <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'download?id=' . $id) ?>"><?= $ic('i-download') ?> Download</a>
+    <?php if (!empty($publicUrl)): ?>
+    <button type="button" class="be-menu__item" role="menuitem" data-copy="#dms-public-url-<?= (int) $id ?>"><?= $ic('i-copy') ?> Pfad kopieren</button>
+    <?php /* The copy's source, not shown (owner 2026-10-23). Off-screen, not display:none — over plain http the copy SELECTS it (core.js clipboard). */ ?>
+    <input type="text" id="dms-public-url-<?= (int) $id ?>" value="<?= e($publicUrl) ?>" readonly tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+
+    <?php endif; ?>
     <?php endif; ?>
     <?php if (!$isDriveRoot): ?>
     <button type="button" class="be-menu__item be-menu__item--danger" role="menuitem" data-fetch-get="<?= e($delUrl) ?>"><?= $ic('i-trash') ?> Löschen</button>
