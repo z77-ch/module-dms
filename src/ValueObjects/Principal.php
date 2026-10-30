@@ -3,6 +3,7 @@
 namespace Z77\Module\Dms\ValueObjects;
 
 use Z77\Core\Config\AuthRole;
+use Z77\Module\Dms\Services\PrincipalRoles;
 use Z77\Shared\Auth\AuthUser;
 
 /**
@@ -29,7 +30,13 @@ final class Principal
         // role grants only.
         $userId = $user->isBackendRealm() && is_int($user->getId()) ? $user->getId() : 0;
 
-        return new self($userId, $user->getRoles());
+        // Plus the roles a PROJECT grants this non-backend identity through
+        // `dmsConfig['principalRolesHook']` — never a framework role, [] without
+        // a hook ({@see PrincipalRoles}). The ACL cache stays correct: its key
+        // hashes the role list (AclService::signature()).
+        $roles = array_values(array_unique(array_merge($user->getRoles(), PrincipalRoles::for($user))));
+
+        return new self($userId, $roles);
     }
 
     /**

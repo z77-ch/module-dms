@@ -25,6 +25,16 @@ return [
     // 'moduleFolders' => ['financial' => 'archive'].
     'moduleFolders' => [],
 
+    // Extra roles a PROJECT grants to a non-backend identity (a member), so a
+    // role ACE can open a folder to SOME members instead of all `customer`s
+    // (F1, z77-rudaz.ch 2026-10-30). FQCN of an invokable
+    //   `__invoke(\Z77\Shared\Auth\AuthUser $user): list<string>`
+    // — e.g. ['rudaz-p12-read'] for a member of project 12; that project's folder
+    // carries the matching role ACE. Framework role names are dropped, a hook that
+    // throws grants nothing ({@see \Z77\Module\Dms\Services\PrincipalRoles}).
+    // Null = no extra roles — the DMS behaves exactly as before.
+    'principalRolesHook' => null,
+
     // Reserved route (ADR-017 §8 / R3+R4c / ADR-020): the structural, mode-independent
     // delivery URL. Highest routing precedence (before alias/nav/convention AND before
     // the Fetch short-circuit — /media is reached via <img src> = Fetch mode). The
