@@ -10,6 +10,7 @@ use Z77\Module\Dms\Blob\BlobStorage;
 use Z77\Module\Dms\Blob\LocalBlobStorage;
 use Z77\Persistence\Resolver\UnifiedEntityManager;
 use Z77\Module\Dms\Images\DocumentKind;
+use Z77\Module\Dms\Images\UploadTypes;
 use Z77\Module\Dms\Entities\AccessControlEntry;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Module\Dms\Entities\Folder;
@@ -1331,6 +1332,9 @@ final class DocumentService
             // F4: the web server would choose the content type by extension — such a file
             // always goes through serve() as an attachment (Range-capable PHP stream).
             || DocumentKind::tryFrom($doc->getKind())?->alwaysDownload()
+            // DMS-MEDIA-PHP-001: a copy under the docroot would RUN — also for a document
+            // stored before uploads of such extensions were refused.
+            || UploadTypes::isExecutable($this->variantExt($doc, $variant))
             || $this->effectiveDeliveryMode($doc) !== 'public'
             || !$this->isActiveChain($doc)
         ) {
@@ -1350,6 +1354,7 @@ final class DocumentService
         if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
             throw new \RuntimeException("Materialization: cannot create directory '{$dir}'.");
         }
+        self::ensureMediaGuard($this->mediaBase());
         $file = $dir . '/' . $this->materializedName($doc, $variant);
         $tmp  = $file . '.' . uniqid('', true) . '.tmp';
         if (!copy($source, $tmp) || !rename($tmp, $file)) {
@@ -1397,6 +1402,36 @@ final class DocumentService
             return;
         }
         $this->rrmdir($this->mediaBase() . '/' . $relPath);
+    }
+
+    /**
+     * Third line of DMS-MEDIA-PHP-001 (after the refused upload and the skipped copy): an
+     * `.htaccess` in the media base that takes the script handler away from executable
+     * extensions, so even a file placed there by hand is delivered as text, never run.
+     * Handler directives only (AllowOverride FileInfo — the level the project's own
+     * `public/.htaccess` already needs for `AddHandler`); NOT a deny file — public/media
+     * IS shared/media, a deny would block every image. Written once when missing; a
+     * wiped tree gets it back with its next copy. Best-effort: an unwritable base must
+     * not break delivery (the copy below throws on its own).
+     */
+    private static function ensureMediaGuard(string $base): void
+    {
+        $file = $base . '/.htaccess';
+        if (is_file($file)) {
+            return;
+        }
+        $ext  = implode('|', UploadTypes::EXECUTABLE);
+        $body = "# z77 DMS (DMS-MEDIA-PHP-001): static copies only — nothing here is ever run.\n"
+              . "# Written by DocumentService::materialize() when missing; edit the framework, not this file.\n"
+              . "<FilesMatch \"\\.({$ext})\$\">\n"
+              . "    SetHandler none\n"
+              . "    ForceType text/plain\n"
+              . "</FilesMatch>\n";
+        $tmp = $file . '.' . uniqid('', true) . '.tmp';
+        if (@file_put_contents($tmp, $body) === false || !@rename($tmp, $file)) {
+            @unlink($tmp);
+            error_log("[dms] cannot write the media guard '{$file}'.");
+        }
     }
 
     /** Absolute base of the materialized files under the docroot. */

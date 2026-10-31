@@ -18,10 +18,12 @@ use Z77\Core\DI;
  * Config shape — a list of extensions, or ext => MIME, mixed is fine:
  *   'extraUploadTypes' => ['laz', 'las', 'e57', 'ifc' => 'application/x-step', 'xml'],
  *
- * ⚠️ Refused here, not trusted to the project: an extension the web server may execute
- * or a browser may render as a page (php, html, svg, …) — listing it is silently
- * ignored, the type keeps its normal classification. A malformed MIME falls back to
- * `application/octet-stream`.
+ * ⚠️ Refused here, not trusted to the project:
+ *  - a SERVER-EXECUTABLE extension (php…, cgi, shtml, …) is never accepted at all, in
+ *    every installation (DMS-MEDIA-PHP-001, 2026-10-31): `fromMime()` admits every
+ *    `text/*`, and a public copy under `public/media` would run on the next request;
+ *  - a page type (html, svg, js) on the list is ignored — it keeps its normal
+ *    classification. A malformed MIME falls back to `application/octet-stream`.
  */
 final class UploadTypes
 {
@@ -30,11 +32,14 @@ final class UploadTypes
     private const EXT  = '/^[a-z0-9]{1,16}$/';
     private const MIME = '#^[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$#';
 
-    /** Executable on the server or rendered as a page by a browser — never by extension. */
-    private const REFUSED = [
-        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'phps', 'pht', 'cgi', 'pl', 'py', 'sh', 'asp', 'aspx', 'jsp',
-        'htaccess', 'html', 'htm', 'xhtml', 'shtml', 'svg', 'svgz', 'js', 'mjs',
+    /** A web server may run these — never uploaded, never copied into the docroot. */
+    public const EXECUTABLE = [
+        'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'phar', 'phps', 'pht',
+        'shtml', 'cgi', 'pl', 'py', 'sh', 'asp', 'aspx', 'jsp', 'htaccess',
     ];
+
+    /** A browser renders these as a page or script — never accepted BY EXTENSION. */
+    private const PAGE = ['html', 'htm', 'xhtml', 'svg', 'svgz', 'js', 'mjs'];
 
     /** @var array<string, string> ext => stored MIME */
     private array $extra = [];
@@ -48,7 +53,7 @@ final class UploadTypes
                 continue;
             }
             $ext = strtolower(ltrim(trim($ext), '.'));
-            if (preg_match(self::EXT, $ext) !== 1 || in_array($ext, self::REFUSED, true)) {
+            if (preg_match(self::EXT, $ext) !== 1 || self::isExecutable($ext) || in_array($ext, self::PAGE, true)) {
                 continue;
             }
             $mime = is_string($mime) ? strtolower(trim($mime)) : '';
@@ -68,6 +73,10 @@ final class UploadTypes
     /** The kind for a sniffed MIME and the file's extension, or null = not allowed. */
     public function kindFor(string $mime, ?string $ext): ?DocumentKind
     {
+        if (self::isExecutable($ext)) {
+            return null;
+        }
+
         return $this->listed($ext) !== null ? DocumentKind::File : DocumentKind::fromMime($mime, $ext);
     }
 
@@ -75,6 +84,12 @@ final class UploadTypes
     public function storedMime(string $sniffed, ?string $ext): string
     {
         return $this->listed($ext) ?? $sniffed;
+    }
+
+    /** Whether a web server may execute a file with this extension. */
+    public static function isExecutable(?string $ext): bool
+    {
+        return $ext !== null && in_array(strtolower(ltrim(trim($ext), '.')), self::EXECUTABLE, true);
     }
 
     /** @return array<string, string> the effective list (ext => MIME), for docs and tests */
