@@ -40,14 +40,19 @@ class OutputController extends AbstractBaseController
      */
     protected function serveAction(): FileResponse
     {
-        $slugs = DI::getRequest()->getSlugs();
+        $slugs   = DI::getRequest()->getSlugs();
+        $service = DocumentService::create();
+
+        // DMS-MEDIA-PHP-001: every /media request that reaches PHP makes sure the guard
+        // exists — also in an installation that never materializes (all protected).
+        $service->guardMedia();
 
         // Minimum shape: /media/<root-slug>/<file> — the root is a real folder (ADR-020).
         if (count($slugs) < 2) {
             throw new NotFoundException('Media not found.');
         }
 
-        $service  = DocumentService::create();
+
         $resolved = $service->resolve($slugs);
         if ($resolved === null) {
             throw new NotFoundException('Media not found.');

@@ -1411,14 +1411,14 @@ final class DocumentService
      * Handler directives only (AllowOverride FileInfo — the level the project's own
      * `public/.htaccess` already needs for `AddHandler`); NOT a deny file — public/media
      * IS shared/media, a deny would block every image. Written once when missing; a
-     * wiped tree gets it back with its next copy. Best-effort: an unwritable base must
-     * not break delivery (the copy below throws on its own).
+     * wiped tree gets it back with its next copy or /media request. Best-effort: an
+     * unwritable base must not break delivery (the copy throws on its own).
      */
     private static function ensureMediaGuard(string $base): void
     {
         $file = $base . '/.htaccess';
-        if (is_file($file)) {
-            return;
+        if (is_file($file) || !is_dir($base)) {
+            return; // no media directory = nothing served from it yet
         }
         $ext  = implode('|', UploadTypes::EXECUTABLE);
         $body = "# z77 DMS (DMS-MEDIA-PHP-001): static copies only — nothing here is ever run.\n"
@@ -1432,6 +1432,15 @@ final class DocumentService
             @unlink($tmp);
             error_log("[dms] cannot write the media guard '{$file}'.");
         }
+    }
+
+    /**
+     * Writes the media guard when missing — called by every `/media` request that reaches
+     * PHP (OutputController), so an installation that never materializes is covered too.
+     */
+    public function guardMedia(): void
+    {
+        self::ensureMediaGuard($this->mediaBase());
     }
 
     /** Absolute base of the materialized files under the docroot. */
