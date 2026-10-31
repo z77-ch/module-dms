@@ -1598,7 +1598,35 @@ trait DriveControllerTrait
             'name'  => $doc->getOriginalName(),
             'bytes' => max(1024 * 1024, (int) $config->get('downloadChunkBytes', 32 * 1024 * 1024)),
             'open'  => $kind !== DocumentKind::Video && $kind !== DocumentKind::Audio,
+            // «Öffnen» of a large video / audio = the player dialog (a new tab asks no Range → 413).
+            'play'  => $kind === DocumentKind::Video || $kind === DocumentKind::Audio
+                ? $this->groupBase() . '/drive/player?id=' . (int) $doc->getId()
+                : null,
         ];
+    }
+
+    /**
+     * Player dialog for a large video / audio (GET, DMS-CHUNK-DL-001): the browser's player
+     * fetches the gated preview URL in ranges, each capped by `FileResponse::RANGE_MAX_BYTES`.
+     * Read gate as for the preview itself; any other kind or no access → «nicht gefunden».
+     */
+    protected function playerAction(): HtmlResponse
+    {
+        $id   = (int) DI::getRequest()->getGetParameter('id');
+        $doc  = $this->readableDoc($id);
+        $kind = $doc !== null ? DocumentKind::tryFrom($doc->getKind()) : null;
+
+        $response = $this->html([
+            'player' => $kind === DocumentKind::Video || $kind === DocumentKind::Audio
+                ? [
+                    'name' => $doc->getDisplayName(),
+                    'src'  => $this->groupBase() . '/document/preview?id=' . $id,
+                    'kind' => $kind->value,
+                ]
+                : null,
+        ]);
+        $this->layoutManager->addPartials('_player', 'Documents/DriveController', self::DMS_NS);
+        return $response;
     }
 
     private function humanSize(int $bytes): string

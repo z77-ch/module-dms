@@ -83,7 +83,11 @@ $ic = fn(string $name) => '<svg class="be-icon" width="15" height="15" aria-hidd
     <button type="button" class="be-menu__item" role="menuitem" data-fetch-get="<?= e($drive . 'add?folder=' . $id) ?>"><?= $ic('i-upload') ?> Datei hochladen</button>
     <?php endif; ?>
     <?php else: ?>
+    <?php if (!empty($chunk['play'])): /* large video / audio: player dialog, a new tab would 413 */ ?>
+    <button type="button" class="be-menu__item" role="menuitem" data-fetch-get="<?= e($chunk['play']) ?>"><?= $ic('i-eye') ?> Öffnen</button>
+    <?php else: ?>
     <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'preview?id=' . $id) ?>" target="_blank" rel="noopener"<?= !empty($chunk['open']) ? $chunkAttr : '' ?>><?= $ic('i-eye') ?> Öffnen</a>
+    <?php endif; ?>
     <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'download?id=' . $id) ?>"<?= $chunkAttr ?>><?= $ic('i-download') ?> Download</a>
     <?php if (!empty($publicUrl)): ?>
     <button type="button" class="be-menu__item" role="menuitem" data-copy="#dms-public-url-<?= (int) $id ?>"><?= $ic('i-copy') ?> Pfad kopieren</button>

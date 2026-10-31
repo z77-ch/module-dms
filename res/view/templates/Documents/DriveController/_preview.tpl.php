@@ -43,7 +43,11 @@ $chunkAttr = $chunk !== null
           <span class="dms-preview__meta-key">Aktiv</span><span class="dms-preview__meta-value"><?= $preview['active'] ? 'ja' : 'nein' ?></span>
         </div>
         <div class="dms-preview__actions">
+          <?php if (!empty($preview['chunk']['play'])): /* large video / audio: player dialog, a new tab would 413 */ ?>
+          <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= e($preview['chunk']['play']) ?>"><svg class="dms-icon"><use href="#i-eye"/></svg> Öffnen</button>
+          <?php else: ?>
           <a class="dms-btn dms-btn--ghost" href="<?= e($preview['previewUrl']) ?>" target="_blank" rel="noopener"<?= !empty($preview['chunk']['open']) ? $chunkAttr : '' ?>><svg class="dms-icon"><use href="#i-eye"/></svg> Öffnen</a>
+          <?php endif; ?>
           <a class="dms-btn dms-btn--ghost" href="<?= e($preview['downloadUrl']) ?>"<?= $chunkAttr ?>><svg class="dms-icon"><use href="#i-download"/></svg> Download</a>
           <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= $base ?>/drive/edit?id=<?= (int)$preview['id'] ?>"><svg class="dms-icon"><use href="#i-edit"/></svg> Bearbeiten</button>
           <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= $base ?>/drive/move?id=<?= (int)$preview['id'] ?>"><svg class="dms-icon"><use href="#i-move"/></svg> Verschieben</button>
