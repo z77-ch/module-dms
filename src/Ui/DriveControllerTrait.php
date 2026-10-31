@@ -153,6 +153,17 @@ trait DriveControllerTrait
     }
 
     /** kind → [thumb modifier, icon sprite id] for the list/preview UI. */
+    /**
+     * Media extensions the current browsers (Firefox, Chrome, Safari) can play in a
+     * `<video>` / `<audio>` element — by container; a codec inside may still fail, the
+     * player then shows its own error. Everything else (wmv, avi, mkv, flv, wma, …) gets
+     * no player in the player dialog, only the hint and the download.
+     */
+    private const BROWSER_PLAYABLE = [
+        'mp4', 'm4v', 'webm', 'ogv', 'mov',
+        'mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'opus', 'flac', 'weba',
+    ];
+
     private const KIND_UI = [
         'image'   => ['image',    'i-image'],
         'pdf'     => ['document', 'i-doc'],
@@ -1619,9 +1630,13 @@ trait DriveControllerTrait
         $response = $this->html([
             'player' => $kind === DocumentKind::Video || $kind === DocumentKind::Audio
                 ? [
-                    'name' => $doc->getDisplayName(),
-                    'src'  => $this->groupBase() . '/document/preview?id=' . $id,
-                    'kind' => $kind->value,
+                    'name'     => $doc->getDisplayName(),
+                    'src'      => $this->groupBase() . '/document/preview?id=' . $id,
+                    'kind'     => $kind->value,
+                    // A format no browser plays (WMV, AVI, …) gets the hint and the download
+                    // instead of a player stuck at 0:00 (owner 2026-10-31).
+                    'playable' => in_array($doc->getExt(), self::BROWSER_PLAYABLE, true),
+                    'chunk'    => $this->chunkedDownload($doc),
                 ]
                 : null,
         ]);
