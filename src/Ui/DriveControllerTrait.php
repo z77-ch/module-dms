@@ -11,6 +11,7 @@ use Z77\Core\Config\AuthRole,
     Z77\Shared\Attributes\HttpMethod,
     Z77\Module\Dms\Entities\Document,
     Z77\Module\Dms\Entities\Folder,
+    Z77\Module\Dms\Images\DocumentKind,
     Z77\Module\Dms\Images\ImageProfileRegistry,
     Z77\Module\Dms\Repositories\FolderRepository,
     Z77\Module\Dms\Services\Authz,
@@ -43,7 +44,11 @@ use Z77\Core\Config\AuthRole,
  *
  * Large files: the chunked-upload endpoints ({@see ChunkedUploadTrait}, F3) are mounted
  * here, so every Drive host offers `drive/chunk-*`; the upload modal hands a file bigger
- * than one chunk to them (`documents/chunk-upload.js`, transport `dms-chunk`).
+ * than one chunk to them (`documents/chunk-upload.js`, transport `dms-chunk`). A document
+ * from `dmsConfig['chunkedDownloadFrom']` on comes DOWN in pieces too (DMS-CHUNK-DL-001):
+ * its «Download» (and «Öffnen», unless it is a video/audio) carries `data-dms-chunk-*`, and
+ * drive.js hands it to `documents/chunk-download.js` — the bytes still come from the
+ * domain-gated `document/download` endpoint, one explicit Range per piece.
  *
  * The using class MUST provide (via its host base): `html()`, `fetch()`, `fetchError()`,
  * `json()`, `em()`, `$layoutManager`, `$messageService`.
@@ -181,6 +186,9 @@ trait DriveControllerTrait
         // full-reload fallback — CSS/server-first (conventions.md#javascript).
         $this->layoutManager->addCss('dms', 'Z77\\Module\\Dms');
         $this->layoutManager->addJs('documents/drive', self::DMS_NS);
+        // Large files come down in pieces (DMS-CHUNK-DL-001); its service worker is
+        // registered on the first such download, not on page load.
+        $this->layoutManager->addJs('documents/chunk-download', self::DMS_NS);
         return $response;
     }
 
@@ -1060,6 +1068,8 @@ trait DriveControllerTrait
             'delivery' => $delivery,
             // A public document's path, copied with one click from the menu (owner 2026-10-23).
             'publicUrl' => $type === 'document' && $delivery === 'public' ? $this->publicPath($id) : null,
+            // A large document's Download / Öffnen go through the chunked download.
+            'chunk'    => $type === 'document' ? $this->chunkedDownload($this->readableDoc($id)) : null,
             // Current drive selection, so the inline active switch refreshes that view.
             'folder'   => $this->folderParam(),
             'doc'      => $this->docParam(),
@@ -1556,6 +1566,38 @@ trait DriveControllerTrait
             'active'       => $doc->isActive(),
             'previewUrl'   => $this->groupBase() . '/document/preview?id=' . $id,
             'downloadUrl'  => $this->groupBase() . '/document/download?id=' . $id,
+            'chunk'        => $this->chunkedDownload($doc),
+        ];
+    }
+
+    /**
+     * How a LARGE document comes down (DMS-CHUNK-DL-001): null below
+     * `dmsConfig['chunkedDownloadFrom']` — the plain links stay, exactly as before. From that
+     * size on, the host's body cap (cyon: 500 MB) would refuse the one-answer download, so
+     * the links carry the chunked download's data: the download URL (the same domain-gated
+     * endpoint — every piece is one explicit Range on it), the name and the piece size.
+     * `open`: «Öffnen» uses it too — except for video/audio, whose player asks ranges itself
+     * (every range answer is capped at `FileResponse::RANGE_MAX_BYTES`, 256 MiB).
+     *
+     * @return array{url: string, name: string, bytes: int, open: bool}|null
+     */
+    private function chunkedDownload(?Document $doc): ?array
+    {
+        if ($doc === null) {
+            return null;
+        }
+        $config = DI::getConfigManager()->getArrayConfig('App/Config/dmsConfig', self::DMS_NS);
+        $from   = (int) $config->get('chunkedDownloadFrom', 256 * 1024 * 1024);
+        if ($from <= 0 || $doc->getSizeBytes() < $from) {
+            return null;
+        }
+        $kind = DocumentKind::tryFrom($doc->getKind());
+
+        return [
+            'url'   => $this->groupBase() . '/document/download?id=' . (int) $doc->getId(),
+            'name'  => $doc->getOriginalName(),
+            'bytes' => max(1024 * 1024, (int) $config->get('downloadChunkBytes', 32 * 1024 * 1024)),
+            'open'  => $kind !== DocumentKind::Video && $kind !== DocumentKind::Audio,
         ];
     }
 

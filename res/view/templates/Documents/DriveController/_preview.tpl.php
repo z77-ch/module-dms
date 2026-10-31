@@ -6,6 +6,12 @@
  *
  * @var array|null $preview  selected document preview view-model (null = empty state)
  */
+// A large document comes down in pieces (DMS-CHUNK-DL-001): drive.js hands a link with
+// `data-dms-chunk-download` to `documents/chunk-download.js`; the href stays the fallback.
+$chunk     = $preview['chunk'] ?? null;
+$chunkAttr = $chunk !== null
+    ? ' data-dms-chunk-download="' . e($chunk['url']) . '" data-dms-chunk-name="' . e($chunk['name']) . '" data-dms-chunk-bytes="' . (int) $chunk['bytes'] . '"'
+    : '';
 ?>
 <aside class="dms-drive__preview z77-split__pane z77-split__pane--detail">
   <?php /* Only reachable — and only visible — while the pane is an overlay (narrow Drive).
@@ -37,8 +43,8 @@
           <span class="dms-preview__meta-key">Aktiv</span><span class="dms-preview__meta-value"><?= $preview['active'] ? 'ja' : 'nein' ?></span>
         </div>
         <div class="dms-preview__actions">
-          <a class="dms-btn dms-btn--ghost" href="<?= e($preview['previewUrl']) ?>" target="_blank" rel="noopener"><svg class="dms-icon"><use href="#i-eye"/></svg> Öffnen</a>
-          <a class="dms-btn dms-btn--ghost" href="<?= e($preview['downloadUrl']) ?>"><svg class="dms-icon"><use href="#i-download"/></svg> Download</a>
+          <a class="dms-btn dms-btn--ghost" href="<?= e($preview['previewUrl']) ?>" target="_blank" rel="noopener"<?= !empty($preview['chunk']['open']) ? $chunkAttr : '' ?>><svg class="dms-icon"><use href="#i-eye"/></svg> Öffnen</a>
+          <a class="dms-btn dms-btn--ghost" href="<?= e($preview['downloadUrl']) ?>"<?= $chunkAttr ?>><svg class="dms-icon"><use href="#i-download"/></svg> Download</a>
           <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= $base ?>/drive/edit?id=<?= (int)$preview['id'] ?>"><svg class="dms-icon"><use href="#i-edit"/></svg> Bearbeiten</button>
           <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= $base ?>/drive/move?id=<?= (int)$preview['id'] ?>"><svg class="dms-icon"><use href="#i-move"/></svg> Verschieben</button>
           <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= $base ?>/drive/confirm-delete?id=<?= (int)$preview['id'] ?>"><svg class="dms-icon"><use href="#i-trash"/></svg> Löschen</button>

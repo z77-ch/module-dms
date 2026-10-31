@@ -18,6 +18,7 @@
  * @var string   $delivery     effective delivery: public|protected|sealed|none
  * @var int|null $folder  current drive selection (so the active toggle refreshes that view)
  * @var int|null $doc     current selected document
+ * @var array|null $chunk  large document: chunked-download data ({@see DriveControllerTrait::chunkedDownload}), else null
  */
 $drive = $base . '/drive/';
 $docBase = $base . '/document/';
@@ -42,6 +43,12 @@ $deliveryInfo = [
 
 // `be-icon` (backend) over the drive page's inline `#i-*` sprite (same document DOM — the
 // menu is only opened from the Drive).
+// A large document comes down in pieces (DMS-CHUNK-DL-001): drive.js hands a link with
+// `data-dms-chunk-download` to `documents/chunk-download.js`; the href stays the fallback.
+$chunkAttr = !empty($chunk)
+    ? ' data-dms-chunk-download="' . e($chunk['url']) . '" data-dms-chunk-name="' . e($chunk['name']) . '" data-dms-chunk-bytes="' . (int) $chunk['bytes'] . '"'
+    : '';
+
 $ic = fn(string $name) => '<svg class="be-icon" width="15" height="15" aria-hidden="true"><use href="#' . $name . '"/></svg>';
 ?>
 <div class="be-menu" role="menu" aria-label="Aktionen — «<?= e($name) ?>»">
@@ -76,8 +83,8 @@ $ic = fn(string $name) => '<svg class="be-icon" width="15" height="15" aria-hidd
     <button type="button" class="be-menu__item" role="menuitem" data-fetch-get="<?= e($drive . 'add?folder=' . $id) ?>"><?= $ic('i-upload') ?> Datei hochladen</button>
     <?php endif; ?>
     <?php else: ?>
-    <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'preview?id=' . $id) ?>" target="_blank" rel="noopener"><?= $ic('i-eye') ?> Öffnen</a>
-    <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'download?id=' . $id) ?>"><?= $ic('i-download') ?> Download</a>
+    <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'preview?id=' . $id) ?>" target="_blank" rel="noopener"<?= !empty($chunk['open']) ? $chunkAttr : '' ?>><?= $ic('i-eye') ?> Öffnen</a>
+    <a class="be-menu__item" role="menuitem" href="<?= e($docBase . 'download?id=' . $id) ?>"<?= $chunkAttr ?>><?= $ic('i-download') ?> Download</a>
     <?php if (!empty($publicUrl)): ?>
     <button type="button" class="be-menu__item" role="menuitem" data-copy="#dms-public-url-<?= (int) $id ?>"><?= $ic('i-copy') ?> Pfad kopieren</button>
     <?php /* The copy's source, not shown (owner 2026-10-23). Off-screen, not display:none — over plain http the copy SELECTS it (core.js clipboard). */ ?>

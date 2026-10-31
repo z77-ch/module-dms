@@ -56,6 +56,19 @@ return [
     // stays bounded by the PHP transport cap regardless.
     'maxUploadBytes' => null,
 
+    // Chunked download (DMS-CHUNK-DL-001, z77-rudaz.ch 2026-10-31): the host refuses an
+    // answer above its body cap (cyon 500 MB → 413), so the Drive's «Download» of a
+    // document from this size on (bytes) goes through `documents/chunk-download.js` —
+    // explicit Range pieces from the same gated endpoint; smaller files keep the plain
+    // link, exactly as before. 0 = never chunked.
+    'chunkedDownloadFrom' => 256 * 1024 * 1024,
+
+    // Piece size of that download, in bytes — its own key, not the upload's `chunkBytes`
+    // (that one is clamped to the PHP upload limit, which says nothing about answers).
+    // 32 MB: few requests, far below the host cap; the browser asks each piece with an
+    // explicit end, below FileResponse::RANGE_MAX_BYTES (256 MiB), so served as asked.
+    'downloadChunkBytes' => 32 * 1024 * 1024,
+
     // Background jobs this module offers to the runner (ADR-031). The key is what a
     // queue entry stores. No 'defaultSchedule': `dms-chunk-cleanup` deletes (abandoned
     // upload leftovers under data/dms/chunks), so an operator switches it on (jobs.md,

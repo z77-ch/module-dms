@@ -282,4 +282,85 @@
             }
         });
     });
+
+    /* ── large files: chunked download (DMS-CHUNK-DL-001) ───────────────────
+     *
+     * Why JS: the host refuses an answer over ~500 MB (413), so a large document
+     * cannot come down through its plain link. The server marks such a «Download»
+     * (and «Öffnen» of a non-media kind) with `data-dms-chunk-download` = the
+     * domain-gated download URL; `documents/chunk-download.js` fetches it piece by
+     * piece. The href stays the fallback when that script is absent. Delegated on
+     * `document`: the preview pane is replaced on every refresh and the ⋮ menu
+     * lives in <body>, outside the Drive. Progress is a flash line built with
+     * textContent only; its × cancels.
+     */
+    var running = {};
+
+    function sizeLabel(bytes) {
+        var units = ['B', 'KB', 'MB', 'GB'], i = 0, n = bytes;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return (i === 0 ? String(n) : n.toFixed(1)) + ' ' + units[i];
+    }
+
+    function flash(type, text) {
+        if (window._Z77 && _Z77.core && _Z77.core.flash) { _Z77.core.flash.show(type, text); }
+    }
+
+    function chunkDownload(link) {
+        var url  = link.getAttribute('data-dms-chunk-download');
+        var name = link.getAttribute('data-dms-chunk-name') || '';
+        if (running[url]) return;   // already on its way
+
+        var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+        var box  = document.getElementById('flash-messages');
+        var line = null, text = null;
+        if (box) {
+            line = document.createElement('div');
+            line.className = 'flash-msg flash-msg--info';
+            text = document.createElement('span');
+            text.className = 'flash-msg__text';
+            text.textContent = 'Download «' + name + '» wird vorbereitet …';
+            var stop = document.createElement('button');
+            stop.type = 'button';
+            stop.className = 'flash-msg__close';
+            stop.setAttribute('aria-label', 'Download abbrechen');
+            stop.textContent = '×';
+            stop.addEventListener('click', function () { if (ctrl) ctrl.abort(); });
+            line.appendChild(text);
+            line.appendChild(stop);
+            box.appendChild(line);
+        }
+        running[url] = true;
+
+        function close() {
+            delete running[url];
+            if (line && line.parentNode) line.parentNode.removeChild(line);
+        }
+
+        window.Z77ChunkDownload.download(url, {
+            filename:   name,
+            chunkBytes: parseInt(link.getAttribute('data-dms-chunk-bytes'), 10) || 0,
+            signal:     ctrl ? ctrl.signal : undefined,
+            onProgress: function (loaded, total) {
+                if (!text) return;
+                var pct = total > 0 ? Math.floor(loaded * 100 / total) : 100;
+                text.textContent = 'Download «' + name + '»: ' + pct + ' % (' + sizeLabel(loaded) + ' von ' + sizeLabel(total) + ')';
+            }
+        }).then(function () {
+            close();
+            flash('success', 'Download «' + name + '» abgeschlossen');
+        }, function (err) {
+            close();
+            if (err && err.name === 'AbortError') flash('info', 'Download «' + name + '» abgebrochen');
+            else flash('error', 'Download «' + name + '» fehlgeschlagen: ' + (err && err.message ? err.message : 'unbekannter Fehler'));
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        var link = e.target.closest && e.target.closest('a[data-dms-chunk-download]');
+        if (!link || !window.Z77ChunkDownload) return;
+        e.preventDefault();
+        chunkDownload(link);
+    });
 }());
