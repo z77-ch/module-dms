@@ -35,6 +35,15 @@ return [
     // Null = no extra roles — the DMS behaves exactly as before.
     'principalRolesHook' => null,
 
+    // File types THIS installation accepts by extension although `finfo` cannot name
+    // them (F4, z77-rudaz.ch 2026-10-31): point clouds, BIM, … A list of extensions or
+    // ext => MIME, e.g. ['laz', 'las', 'e57', 'ifc' => 'application/x-step', 'xml'].
+    // A listed extension wins over the sniff and becomes kind `file`: never inline, no
+    // variants, no static public copy, always a download; stored MIME = the listed one or
+    // application/octet-stream. Server-executable / page types (php, html, svg, js, …)
+    // are ignored ({@see \Z77\Module\Dms\Images\UploadTypes}). Empty = as before.
+    'extraUploadTypes' => [],
+
     // Reserved route (ADR-017 §8 / R3+R4c / ADR-020): the structural, mode-independent
     // delivery URL. Highest routing precedence (before alias/nav/convention AND before
     // the Fetch short-circuit — /media is reached via <img src> = Fetch mode). The

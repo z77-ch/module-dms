@@ -6,10 +6,10 @@ use Z77\Core\DI;
 use Z77\Module\Dms\Blob\BlobStorage;
 use Z77\Module\Dms\Blob\LocalBlobStorage;
 use Z77\Persistence\Resolver\UnifiedEntityManager;
-use Z77\Module\Dms\Images\DocumentKind;
 use Z77\Module\Dms\Images\GdImageProcessor;
 use Z77\Module\Dms\Images\ImageProcessor;
 use Z77\Module\Dms\Images\ImageProfileRegistry;
+use Z77\Module\Dms\Images\UploadTypes;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Shared\Libraries\Convention\Naming;
 use Z77\Shared\ValueObjects\UploadedFile;
@@ -35,6 +35,7 @@ final class SaveService
         private UnifiedEntityManager $em,
         private ImageProfileRegistry $profiles,
         private ImageProcessor $imageProcessor,
+        private UploadTypes $types = new UploadTypes(),
     ) {}
 
     public static function create(): self
@@ -44,6 +45,7 @@ final class SaveService
             DI::getUnifiedEntityManager(),
             ImageProfileRegistry::fromConfig(),
             new GdImageProcessor(),
+            UploadTypes::fromConfig(),
         );
     }
 
@@ -58,7 +60,7 @@ final class SaveService
         $this->assertFolderTarget($req->folderId);
 
         $ext  = strtolower(pathinfo($req->originalName, PATHINFO_EXTENSION));
-        $kind = DocumentKind::fromMime($req->mimeType, $ext);
+        $kind = $this->types->kindFor($req->mimeType, $ext);
         if ($kind === null) {
             throw new \RuntimeException("SaveService: file type '{$req->mimeType}' is not allowed.");
         }
@@ -133,7 +135,7 @@ final class SaveService
         $this->assertFolderTarget($req->folderId);
 
         $ext  = strtolower(pathinfo($req->originalName, PATHINFO_EXTENSION));
-        $kind = DocumentKind::fromMime($req->mimeType, $ext);
+        $kind = $this->types->kindFor($req->mimeType, $ext);
         if ($kind === null) {
             throw new \RuntimeException("SaveService: file type '{$req->mimeType}' is not allowed.");
         }
@@ -229,7 +231,7 @@ final class SaveService
     public function replaceFromUpload(Document $doc, UploadedFile $file, SaveRequest $req, ?string $checksum = null): Document
     {
         $ext  = $doc->getExt();
-        $kind = DocumentKind::fromMime($req->mimeType, $ext);
+        $kind = $this->types->kindFor($req->mimeType, $ext);
         if ($kind === null) {
             throw new \RuntimeException("SaveService: file type '{$req->mimeType}' is not allowed.");
         }
@@ -314,7 +316,7 @@ final class SaveService
     public function replace(Document $doc, string $bytes, SaveRequest $req): Document
     {
         $ext  = $doc->getExt();
-        $kind = DocumentKind::fromMime($req->mimeType, $ext);
+        $kind = $this->types->kindFor($req->mimeType, $ext);
         if ($kind === null) {
             throw new \RuntimeException("SaveService: file type '{$req->mimeType}' is not allowed.");
         }

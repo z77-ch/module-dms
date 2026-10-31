@@ -355,7 +355,10 @@ final class DocumentService
             path: $path,
             filename: $doc->getOriginalName(),
             mimeType: $mime,
-            disposition: $download ? FileResponse::ATTACHMENT : FileResponse::INLINE,
+            // A type allowed by extension only (F4) is never rendered by a browser.
+            disposition: $download || DocumentKind::tryFrom($doc->getKind())?->alwaysDownload()
+                ? FileResponse::ATTACHMENT
+                : FileResponse::INLINE,
             etag: $doc->getChecksum() . '-' . $variantName,
             // Default to the safe (private) policy; the public `/media` branch passes an
             // explicit immutable `cacheControl` (OutputController).
@@ -1325,6 +1328,9 @@ final class DocumentService
     public function materialize(Document $doc, string $variant = BlobStorage::ORIGINAL): void
     {
         if ($doc->isDeleted()
+            // F4: the web server would choose the content type by extension — such a file
+            // always goes through serve() as an attachment (Range-capable PHP stream).
+            || DocumentKind::tryFrom($doc->getKind())?->alwaysDownload()
             || $this->effectiveDeliveryMode($doc) !== 'public'
             || !$this->isActiveChain($doc)
         ) {

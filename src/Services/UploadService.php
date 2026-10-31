@@ -3,6 +3,7 @@
 namespace Z77\Module\Dms\Services;
 
 use Z77\Module\Dms\Images\DocumentKind;
+use Z77\Module\Dms\Images\UploadTypes;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Shared\ValueObjects\UploadedFile;
 
@@ -38,6 +39,7 @@ final class UploadService
         private SaveService $saveService,
         private Authz $authz,
         private int $maxBytes = PHP_INT_MAX,
+        private UploadTypes $types = new UploadTypes(),
     ) {}
 
     /**
@@ -47,7 +49,7 @@ final class UploadService
      */
     public static function create(?int $maxBytes = null): self
     {
-        return new self(SaveService::create(), Authz::create(), $maxBytes ?? self::serverMaxBytes());
+        return new self(SaveService::create(), Authz::create(), $maxBytes ?? self::serverMaxBytes(), UploadTypes::fromConfig());
     }
 
     /**
@@ -160,11 +162,14 @@ final class UploadService
             );
         }
 
-        $mime = $file->sniffMime();
-        $kind = DocumentKind::fromMime($mime, $file->extension());
+        // The installation may add types by extension (dmsConfig extraUploadTypes, F4): those
+        // store the listed MIME (or octet-stream) instead of the sniff — never the client's.
+        $sniffed = $file->sniffMime();
+        $kind    = $this->types->kindFor($sniffed, $file->extension());
         if ($kind === null) {
-            throw new \RuntimeException("UploadService: file type '{$mime}' is not allowed.");
+            throw new \RuntimeException("UploadService: file type '{$sniffed}' is not allowed.");
         }
+        $mime = $this->types->storedMime($sniffed, $file->extension());
 
         // The upload original is MOVED into the blob (never read into memory). Only an IMAGE
         // original is decoded in RAM (GD needs the pixels), so the memory pre-check applies

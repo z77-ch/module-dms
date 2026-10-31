@@ -152,6 +152,7 @@ trait DriveControllerTrait
         'archive' => ['archive',  'i-archive'],
         'audio'   => ['audio',    'i-audio'],
         'video'   => ['video',    'i-audio'],
+        'file'    => ['document', 'i-doc'],   // allowed by extension (dmsConfig extraUploadTypes)
     ];
 
     private function folderRepo(): FolderRepository

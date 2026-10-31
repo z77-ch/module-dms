@@ -32,6 +32,8 @@ enum DocumentKind: string
     case Json = 'json';
     case Html = 'html';
     case Archive = 'archive';
+    /** A type the installation allows BY EXTENSION ({@see UploadTypes}) — never from a MIME. */
+    case File = 'file';
 
     /**
      * Resolve a sniffed MIME type to a kind, or `null` if it is not on the allowlist.
@@ -94,8 +96,19 @@ enum DocumentKind: string
         return match ($this) {
             self::Image, self::Pdf, self::Video, self::Audio,
             self::Text, self::Json, self::Html => true,
-            self::Word, self::Excel, self::Archive => false,
+            self::Word, self::Excel, self::Archive, self::File => false,
         };
+    }
+
+    /**
+     * Whether delivery must always be a download (`Content-Disposition: attachment`) and
+     * never a static public copy: the bytes are not known, so no browser may render them
+     * (F4, 2026-10-31). The static copy is skipped because the web server would pick the
+     * content type by extension (an `.xml` would render inline).
+     */
+    public function alwaysDownload(): bool
+    {
+        return $this === self::File;
     }
 
     /**
