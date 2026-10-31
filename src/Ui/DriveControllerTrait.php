@@ -14,6 +14,7 @@ use Z77\Core\Config\AuthRole,
     Z77\Module\Dms\Images\ImageProfileRegistry,
     Z77\Module\Dms\Repositories\FolderRepository,
     Z77\Module\Dms\Services\Authz,
+    Z77\Module\Dms\Services\ChunkedUploadService,
     Z77\Module\Dms\Services\DocumentService,
     Z77\Module\Dms\Services\DuplicateUploadException,
     Z77\Module\Dms\Services\FolderService,
@@ -40,11 +41,17 @@ use Z77\Core\Config\AuthRole,
  * {@see DocumentService::effectiveDeliveryMode}. Image thumbnails/preview reuse the
  * sibling `document/preview` byte-delivery endpoint (DocumentDeliveryTrait — domain-gated).
  *
+ * Large files: the chunked-upload endpoints ({@see ChunkedUploadTrait}, F3) are mounted
+ * here, so every Drive host offers `drive/chunk-*`; the upload modal hands a file bigger
+ * than one chunk to them (`documents/chunk-upload.js`, transport `dms-chunk`).
+ *
  * The using class MUST provide (via its host base): `html()`, `fetch()`, `fetchError()`,
- * `em()`, `$layoutManager`, `$messageService`.
+ * `json()`, `em()`, `$layoutManager`, `$messageService`.
  */
 trait DriveControllerTrait
 {
+    use ChunkedUploadTrait;
+
     /** Namespace that owns the fragment's templates/JS/CSS (ADR-018). */
     private const DMS_NS = 'Z77\\Module\\Dms';
 
@@ -196,11 +203,43 @@ trait DriveControllerTrait
      */
     private function panes(array $vm): FetchResponse
     {
-        return $this->fetch()
-            ->addCommand('replace-html', ['target' => '.dms-drive__tree',       'html' => $this->renderPane('_tree', $vm)])
-            ->addCommand('replace-html', ['target' => '.dms-drive__breadcrumb', 'html' => $this->renderPane('_breadcrumb', $vm)])
-            ->addCommand('replace-html', ['target' => '.dms-drive__list',       'html' => $this->renderPane('_list', $vm)])
-            ->addCommand('replace-html', ['target' => '.dms-drive__preview',    'html' => $this->renderPane('_preview', $vm)]);
+        $response = $this->fetch();
+        foreach ($this->paneCommands($vm) as $command) {
+            $action = $command['action'];
+            unset($command['action']);
+            $response->addCommand($action, $command);
+        }
+
+        return $response;
+    }
+
+    /**
+     * The four pane replacements as envelope commands — for {@see panes} and for the
+     * chunked upload's JSON finish ({@see chunkUploadCommands}), which carries them bare.
+     *
+     * @return list<array<string, string>>
+     */
+    private function paneCommands(array $vm): array
+    {
+        return [
+            ['action' => 'replace-html', 'target' => '.dms-drive__tree',       'html' => $this->renderPane('_tree', $vm)],
+            ['action' => 'replace-html', 'target' => '.dms-drive__breadcrumb', 'html' => $this->renderPane('_breadcrumb', $vm)],
+            ['action' => 'replace-html', 'target' => '.dms-drive__list',       'html' => $this->renderPane('_list', $vm)],
+            ['action' => 'replace-html', 'target' => '.dms-drive__preview',    'html' => $this->renderPane('_preview', $vm)],
+        ];
+    }
+
+    /**
+     * A chunked upload that finished answers what {@see uploadAction} answers on success:
+     * the panes for the file's folder with the file selected, and the modal closed. The
+     * upload component runs them once, after the last file of the run.
+     */
+    protected function chunkUploadCommands(Document $doc): array
+    {
+        $commands   = $this->paneCommands($this->buildViewModel($doc->getFolderId(), (int) $doc->getId()));
+        $commands[] = ['action' => 'close-modal'];
+
+        return $commands;
     }
 
     /**
@@ -234,8 +273,13 @@ trait DriveControllerTrait
      * `ask` on a name conflict: the Drive has always put that question to the operator, and
      * the component's prompt is that question (the row waits, the other files go on).
      */
-    private function driveUploadPolicy(): UploadPolicy
+    private function driveUploadPolicy(?int $chunkedMax = null): UploadPolicy
     {
+        // The hint states the chunked reach (F3): with the script, a file bigger than one
+        // chunk is not bounded by the transport cap — only by `maxUploadBytes` and the disk.
+        $hint = 'mehrere · grosse Dateien werden in Teilen übertragen'
+            . ($chunkedMax !== null ? ' · bis ' . UploadPolicy::formatBytes($chunkedMax) : '');
+
         return new UploadPolicy(
             endpoint:    $this->groupBase() . '/drive/upload',
             field:       'files[]',
@@ -243,8 +287,26 @@ trait DriveControllerTrait
             maxBytes:    UploadService::serverMaxBytes(),
             onConflict:  UploadPolicy::CONFLICT_ASK,
             label:       'Dateien hierher ziehen',
+            hint:        $hint,
             maxBytesPer: ['image/*' => UploadService::effectiveMaxUploadBytes()],
         );
+    }
+
+    /**
+     * What the `dms-chunk` transport of the upload modal needs (F3): the endpoint base of
+     * {@see ChunkedUploadTrait} on this host, the effective chunk size (a file bigger than
+     * one chunk goes chunked) and the total cap (0 = none). The server is the source; the
+     * script carries no default of its own.
+     *
+     * @return array{base: string, chunkBytes: int, max: int}
+     */
+    private function driveChunkTransport(ChunkedUploadService $chunks): array
+    {
+        return [
+            'base'       => $this->groupBase() . '/drive',
+            'chunkBytes' => $chunks->chunkBytes(),
+            'max'        => $chunks->maxBytes() ?? 0,
+        ];
     }
 
     /**
@@ -264,8 +326,10 @@ trait DriveControllerTrait
             ? $this->docService()->effectiveFolderDeliveryMode($targetFolder)
             : null;
 
+        $chunks   = ChunkedUploadService::create();
         $response = $this->html([
-            'uploadPolicy'   => $this->driveUploadPolicy(),
+            'uploadPolicy'   => $this->driveUploadPolicy($chunks->maxBytes()),
+            'chunkTransport' => $this->driveChunkTransport($chunks),
             'folderId'       => $target,
             'folderOptions'  => $this->folderOptions(),
             'targetDelivery' => $targetDelivery,
@@ -276,6 +340,12 @@ trait DriveControllerTrait
         // component inside the popup body, which arrived after the page's own bind ran.
         $response->addCommand('load-script', [
             'src'   => $this->layoutManager->resolveJsPath('documents/upload-poster', self::DMS_NS),
+            'scope' => '[data-z77-popup-body]',
+        ]);
+        // The chunked transport (F3) registers itself the same way; the component looks it
+        // up per file at send time, so the load order against `bind-upload` does not matter.
+        $response->addCommand('load-script', [
+            'src'   => $this->layoutManager->resolveJsPath('documents/chunk-upload', self::DMS_NS),
             'scope' => '[data-z77-popup-body]',
         ]);
         $response->addCommand('bind-upload', ['selector' => '[data-z77-popup-body]']);

@@ -162,14 +162,55 @@ final class UploadService
             );
         }
 
-        // The installation may add types by extension (dmsConfig extraUploadTypes, F4): those
-        // store the listed MIME (or octet-stream) instead of the sniff — never the client's.
-        $sniffed = $file->sniffMime();
-        $kind    = $this->types->kindFor($sniffed, $file->extension());
-        if ($kind === null) {
-            throw new \RuntimeException("UploadService: file type '{$sniffed}' is not allowed.");
+        return $this->store($file, $folderId, $profile, $showOriginal, $createdBy, $overwrite, $poster, true);
+    }
+
+    /**
+     * Store a file the SERVER assembled from the chunks of a chunked upload (F3,
+     * {@see ChunkedUploadService::finish}) — the same pipeline as {@see save}: write gate,
+     * allowlist on the sniffed bytes, image memory guard, streamed checksum, duplicate /
+     * name conflict / guarded overwrite. Two differences, both because the file is not a
+     * PHP upload temp file: it is RENAMED into the blob (`move_uploaded_file` would refuse
+     * it), and the transport cap ({@see $maxBytes}, one request) does not apply — the
+     * chunked service enforced its own total limit (`dmsConfig['maxUploadBytes']`) at begin.
+     *
+     * @throws DuplicateUploadException identical bytes already live in the folder (skip)
+     * @throws NameConflictException    same name, different bytes, no overwrite consent
+     * @throws \RuntimeException        unreadable file, a non-allowlisted type, a blocked overwrite
+     */
+    public function saveAssembled(
+        UploadedFile $file,
+        int $folderId,
+        bool $showOriginal = false,
+        ?int $createdBy = null,
+        bool $overwrite = false,
+        ?UploadedFile $poster = null,
+    ): Document {
+        $this->authz->require('folder', $folderId, 'write');
+
+        if (!$file->isOk()) {
+            throw new \RuntimeException('UploadService: the assembled file is missing.');
         }
-        $mime = $this->types->storedMime($sniffed, $file->extension());
+
+        return $this->store($file, $folderId, null, $showOriginal, $createdBy, $overwrite, $poster, false);
+    }
+
+    /**
+     * The ONE pipeline behind {@see save} and {@see saveAssembled}, after the write gate and
+     * the transport checks: classify, memory guard, checksum, duplicate / conflict / overwrite,
+     * then the move into the blob (`$isHttpUpload` picks `move_uploaded_file` or a rename).
+     */
+    private function store(
+        UploadedFile $file,
+        int $folderId,
+        ?string $profile,
+        bool $showOriginal,
+        ?int $createdBy,
+        bool $overwrite,
+        ?UploadedFile $poster,
+        bool $isHttpUpload,
+    ): Document {
+        [$kind, $mime] = $this->classify($file);
 
         // The upload original is MOVED into the blob (never read into memory). Only an IMAGE
         // original is decoded in RAM (GD needs the pixels), so the memory pre-check applies
@@ -213,10 +254,29 @@ final class UploadService
                 );
             }
 
-            return $this->replaceExisting($existing, $file, $request, $checksum);
+            return $this->replaceExisting($existing, $file, $request, $checksum, $isHttpUpload);
         }
 
-        return $this->saveService->saveFromUpload($file, $request, $checksum);
+        return $this->saveService->saveFromUpload($file, $request, $checksum, $isHttpUpload);
+    }
+
+    /**
+     * The allowlist decision on the SNIFFED bytes: the kind and the MIME to store. The
+     * installation may add types by extension (dmsConfig extraUploadTypes, F4): those store
+     * the listed MIME (or octet-stream) instead of the sniff — never the client's.
+     *
+     * @return array{0: DocumentKind, 1: string}
+     * @throws \RuntimeException when the type is not allowed
+     */
+    private function classify(UploadedFile $file): array
+    {
+        $sniffed = $file->sniffMime();
+        $kind    = $this->types->kindFor($sniffed, $file->extension());
+        if ($kind === null) {
+            throw new \RuntimeException("UploadService: file type '{$sniffed}' is not allowed.");
+        }
+
+        return [$kind, $this->types->storedMime($sniffed, $file->extension())];
     }
 
     /**
@@ -225,7 +285,7 @@ final class UploadService
      * `sealed` document never leaves/changes its vault state via an upload; a running
      * retention period blocks content destruction just like a purge.
      */
-    private function replaceExisting(Document $existing, UploadedFile $file, SaveRequest $request, string $checksum): Document
+    private function replaceExisting(Document $existing, UploadedFile $file, SaveRequest $request, string $checksum, bool $isHttpUpload): Document
     {
         $id = (int) $existing->getId();
         $this->authz->require('document', $id, 'manage');
@@ -243,7 +303,7 @@ final class UploadService
         // bytes (the web server ignores the `?v=` token), so drop it before the bytes change.
         $docs->invalidateMaterialized($existing);
 
-        return $this->saveService->replaceFromUpload($existing, $file, $request, $checksum);
+        return $this->saveService->replaceFromUpload($existing, $file, $request, $checksum, $isHttpUpload);
     }
 
     /**

@@ -12,12 +12,17 @@
  *   - the video POSTER frame comes from `documents/upload-poster.js`
  *     (`data-upload-extra="dms-poster"`) — a canvas grab the kernel has no business knowing;
  *   - the two caps: the transport cap for every file, a smaller one for `image/*` because
- *     GD decodes the pixels ({@see \Z77\Shared\Upload\UploadPolicy::$maxBytesPer}).
+ *     GD decodes the pixels ({@see \Z77\Shared\Upload\UploadPolicy::$maxBytesPer});
+ *   - the CHUNKED transport (F3): a file bigger than one chunk goes through
+ *     `documents/chunk-upload.js` (`data-upload-transport="dms-chunk"`) to the
+ *     `drive/chunk-*` endpoints ({@see \Z77\Module\Dms\Ui\ChunkedUploadTrait}) — past
+ *     the transport cap; smaller files keep the one-request path.
  *
  * @var \Z77\Shared\Upload\UploadPolicy $uploadPolicy
  * @var int|null $folderId       target folder pre-selected (the folder open in the Drive)
  * @var list<array{id:int, label:string}> $folderOptions
  * @var string|null $targetDelivery effective delivery of the pre-selected folder
+ * @var array{base:string, chunkBytes:int, max:int} $chunkTransport config of the `dms-chunk` transport
  */
 ob_start();
 ?>
@@ -65,5 +70,7 @@ $fields = (string) ob_get_clean();
         'policy' => $uploadPolicy,
         'fields' => $fields,
         'extra'  => 'dms-poster',
+        'transport'       => 'dms-chunk',
+        'transportConfig' => $chunkTransport,
     ], 'Z77\Shared') ?>
 </div>

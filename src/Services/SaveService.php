@@ -128,9 +128,13 @@ final class SaveService
      * `s/m/l/xl` derivatives. The caller ({@see UploadService}) may pass the checksum it
      * already computed for the duplicate check to avoid a second streamed pass.
      *
+     * `$isHttpUpload` false = the file is NOT a PHP upload temp file but one the server
+     * assembled itself (chunked upload, F3): it is then renamed instead of
+     * `move_uploaded_file`d, which would refuse it.
+     *
      * @throws \RuntimeException when the MIME type is not allowlisted or the temp file is unreadable
      */
-    public function saveFromUpload(UploadedFile $file, SaveRequest $req, ?string $checksum = null): Document
+    public function saveFromUpload(UploadedFile $file, SaveRequest $req, ?string $checksum = null, bool $isHttpUpload = true): Document
     {
         $this->assertFolderTarget($req->folderId);
 
@@ -187,7 +191,7 @@ final class SaveService
         $id = (int) $doc->getId();
 
         // Phase 2: MOVE the original into the blob (no bytes in memory).
-        $this->blob->putFile($id, BlobStorage::ORIGINAL, $ext, $file->tmpPath, true);
+        $this->blob->putFile($id, BlobStorage::ORIGINAL, $ext, $file->tmpPath, $isHttpUpload);
 
         // Phase 3: derivatives.
         if ($kind->hasImageVariants()) {
@@ -225,10 +229,11 @@ final class SaveService
      * In-place overwrite of an uploaded document (the move-based sibling of {@see replace}):
      * MOVE the new original into the blob, stream the checksum, renew the byte-derived
      * fields; identity/ACL/mode/slug/URL stay. Authorization guards are the CALLER's job.
+     * `$isHttpUpload` as in {@see saveFromUpload}.
      *
      * @throws \RuntimeException when the new MIME type is not allowlisted or the temp file is unreadable
      */
-    public function replaceFromUpload(Document $doc, UploadedFile $file, SaveRequest $req, ?string $checksum = null): Document
+    public function replaceFromUpload(Document $doc, UploadedFile $file, SaveRequest $req, ?string $checksum = null, bool $isHttpUpload = true): Document
     {
         $ext  = $doc->getExt();
         $kind = $this->types->kindFor($req->mimeType, $ext);
@@ -253,7 +258,7 @@ final class SaveService
 
         // Clear old variants, then move the new original in.
         $this->blob->delete($id);
-        $this->blob->putFile($id, BlobStorage::ORIGINAL, $ext, $file->tmpPath, true);
+        $this->blob->putFile($id, BlobStorage::ORIGINAL, $ext, $file->tmpPath, $isHttpUpload);
 
         // TODO poster on overwrite (P4): a re-uploaded video drops its old poster variants and
         // gets none back here. Applying `$req->posterBytes` on the overwrite path is optional

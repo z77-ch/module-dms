@@ -44,6 +44,32 @@ return [
     // are ignored ({@see \Z77\Module\Dms\Images\UploadTypes}). Empty = as before.
     'extraUploadTypes' => [],
 
+    // Chunked upload (F3, z77-rudaz.ch 2026-10-31): a file bigger than one request may be
+    // (host cap — cyon 500 MB — and PHP's upload_max_filesize / post_max_size) goes up in
+    // pieces of this size ({@see \Z77\Module\Dms\Services\ChunkedUploadService}). Clamped
+    // below the PHP transport cap at runtime, so a too-large value cannot break uploads;
+    // the browser takes the effective value from the server, never a default of its own.
+    'chunkBytes' => 8 * 1024 * 1024,
+
+    // Total size cap per file for the chunked upload, in bytes; null = no cap beyond the
+    // free disk space (begin() refuses a file that would not fit). A single-request upload
+    // stays bounded by the PHP transport cap regardless.
+    'maxUploadBytes' => null,
+
+    // Background jobs this module offers to the runner (ADR-031). The key is what a
+    // queue entry stores. No 'defaultSchedule': `dms-chunk-cleanup` deletes (abandoned
+    // upload leftovers under data/dms/chunks), so an operator switches it on (jobs.md,
+    // delete-vs-schedule rule) — every new chunked upload sweeps the same leftovers, so
+    // the disk stays in check while it is off.
+    'jobs' => [
+        'dms-chunk-cleanup' => [
+            'class'       => \Z77\Module\Dms\Jobs\ChunkCleanupJob::class,
+            'label'       => 'DMS-Upload-Reste',
+            'runAs'       => AuthRole::CRON_JOB,
+            'maxAttempts' => 3,
+        ],
+    ],
+
     // Reserved route (ADR-017 §8 / R3+R4c / ADR-020): the structural, mode-independent
     // delivery URL. Highest routing precedence (before alias/nav/convention AND before
     // the Fetch short-circuit — /media is reached via <img src> = Fetch mode). The
