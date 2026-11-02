@@ -175,6 +175,9 @@ final class ChunkedUploadService
         if (UploadTypes::isExecutable(strtolower(pathinfo($name, PATHINFO_EXTENSION)))) {
             throw new ChunkUploadException('Dateityp nicht erlaubt.', 415);
         }
+        if (!UploadTypes::isStorable(strtolower(pathinfo($name, PATHINFO_EXTENSION)))) {
+            throw new ChunkUploadException('Dateien ohne gültige Endung können nicht hochgeladen werden.', 415);
+        }
 
         $this->ensureBaseDir();
         // Abandoned uploads go with the next begin as well — the job is the backstop for

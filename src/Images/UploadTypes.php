@@ -84,7 +84,7 @@ final class UploadTypes
     /** The kind for a sniffed MIME and the file's extension, or null = not allowed. */
     public function kindFor(string $mime, ?string $ext): ?DocumentKind
     {
-        if (self::isExecutable($ext)) {
+        if (self::isExecutable($ext) || !self::isStorable($ext)) {
             return null;
         }
 
@@ -95,6 +95,15 @@ final class UploadTypes
     public function storedMime(string $sniffed, ?string $ext): string
     {
         return $this->listed($ext) ?? $sniffed;
+    }
+
+    /**
+     * Whether the blob store can hold a file with this extension ({@see LocalBlobStorage}). Asked
+     * before the record is written: otherwise it stands without bytes (DMS-UPLOAD-EXT-001).
+     */
+    public static function isStorable(?string $ext): bool
+    {
+        return $ext === null || preg_match('/^[a-z0-9]+$/iD', $ext) === 1;
     }
 
     /** Whether a web server may execute a file with this extension. */

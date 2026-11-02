@@ -270,6 +270,9 @@ final class UploadService
      */
     private function classify(UploadedFile $file): array
     {
+        if (!UploadTypes::isStorable($file->extension())) {
+            throw new \RuntimeException('Dateien ohne gültige Endung können nicht hochgeladen werden.');
+        }
         $sniffed = $file->sniffMime();
         $kind    = $this->types->kindFor($sniffed, $file->extension());
         if ($kind === null) {
