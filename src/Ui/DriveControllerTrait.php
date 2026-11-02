@@ -56,6 +56,7 @@ use Z77\Core\Config\AuthRole,
 trait DriveControllerTrait
 {
     use ChunkedUploadTrait;
+    use ZipBundleTrait;
 
     /** Namespace that owns the fragment's templates/JS/CSS (ADR-018). */
     private const DMS_NS = 'Z77\\Module\\Dms';
@@ -1164,12 +1165,15 @@ trait DriveControllerTrait
                 $skipped = 0;
                 foreach ($this->docService()->listDeleted() as $doc) {
                     try {
-                        $this->docService()->purge((int) $doc->getId());
+                        $this->docService()->purge((int) $doc->getId(), withBundles: false);
+                        // One scan per batch, not one per document (DMS-ZIP-001).
+                        $this->zipNotePurged((int) $doc->getId());
                         $purged++;
                     } catch (NotFoundException | \RuntimeException) {
                         $skipped++;
                     }
                 }
+                $this->zipFlushPurged();
                 $this->messageService->pushFlash(
                     $purged > 0 || $skipped === 0 ? 'success' : 'error',
                     $this->bulkLabel($purged) . ' endgültig gelöscht'

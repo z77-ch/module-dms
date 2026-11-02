@@ -152,6 +152,21 @@
     }
 
     /**
+     * A final refusal with the server's own words, when it sent any: the JSON `error` of a
+     * refused piece («wurde geändert …», DMS-ZIP-001). Plain text for the caller's
+     * `textContent`, cut short and without control characters; anything else, or a body that
+     * does not read, keeps the word of statusError. Transient answers are not read, they retry.
+     */
+    function refusal(r) {
+        var fallback = statusError(r);
+        if (!fallback.final || r.redirected || !/\bjson\b/i.test(r.headers.get('Content-Type') || '')) throw fallback;
+        return r.json().catch(noop).then(function (body) {
+            var reason = body && typeof body.error === 'string' ? body.error.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 300) : '';
+            throw reason ? error(reason, true) : fallback;
+        });
+    }
+
+    /**
      * Sequential range reader — the one implementation the page AND the service worker use.
      * `open()` fetches the first piece and resolves {size, etag, filename, type}; `next()`
      * resolves the next piece (Uint8Array) or null at the end; `loaded()` counts the bytes
@@ -174,7 +189,7 @@
             if (opening && r.status === 416 && range && range.total === 0) {
                 return { start: 0, end: -1, total: 0, etag: r.headers.get('ETag'), bytes: new Uint8Array(0), headers: r.headers };
             }
-            if (r.status !== 206) throw statusError(r);
+            if (r.status !== 206) return refusal(r);
             if (!range || range.start !== start || range.end < start || range.end > end || range.end >= range.total) {
                 throw error('Der Server hat ein falsches Teilstück geliefert.', true);
             }

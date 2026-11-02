@@ -69,17 +69,88 @@ return [
     // explicit end, below FileResponse::RANGE_MAX_BYTES (256 MiB), so served as asked.
     'downloadChunkBytes' => 32 * 1024 * 1024,
 
+    // ZIP download of a selection (DMS-ZIP-001): days a bundle stays, counted from when it
+    // got ready. A bundle costs no disk (its bytes are the originals); this is about links
+    // going stale. The gate enforces it, whether a job runs or not.
+    'zipKeepDays' => 7,
+
+    // Below this total (bytes) the checksums run inside the request and the ZIP is ready at
+    // once, without the job; 0 = always the job. To be confirmed on the host (plan, Z6).
+    'zipInstantBytes' => 256 * 1024 * 1024,
+
+    // Live ZIP bundles of one person, of any state. Above it a new one is refused until others
+    // are deleted or expired.
+    'zipMaxBundlesPerPerson' => 20,
+
+    // Live ZIP bundles of the whole installation, the same refusal. This protects every other
+    // person from a pile: each bundle costs a scan's worth of reading in every opening, every
+    // list and every pass of the job, and the per-person cap alone is no bound when many persons
+    // come together. Raise it for an installation with that many active users.
+    'zipMaxBundles' => 2000,
+
+    // An account is gone, its ZIP bundles go with it (kernel `AccountRemovedListeners`).
+    'accountRemovedListeners' => [\Z77\Module\Dms\Services\ZipBundleAccountListener::class],
+
+    // A host page uses the ZIP through its own controller (`Ui\ZipBundleTrait`). Each of these
+    // is opt-in, null = as without; FQCN of an invokable with no constructor argument, the style
+    // of `principalRolesHook` above:
+    //
+    // The address for the mail, instead of the backend user's. '' = no mail.
+    //   `__invoke(\Z77\Shared\Auth\AuthUser $user): string`
+    'zipMailAddressHook' => null,
+
+    // A gate of the project's own, after `read`, at creation and on every piece; the job, which
+    // has no session, does not ask it. A no ends like a missing right. It fails closed: a missing
+    // class, an exception, anything but `true` is a no.
+    //   `__invoke(int $documentId): bool`
+    'zipDocumentGateHook' => null,
+
+    // Once per bundle, when its first piece is answered: ids only. Retries and concurrent first
+    // pieces do not call it again; a failure is logged and the download goes on.
+    //   `__invoke(string $bundleId, array $documentIds): void`
+    'zipDownloadStartedHook' => null,
+
+    // The ZIP's mails. `default` for the whole installation, any other key for a host whose
+    // controller answers it from `zipMailProfile()`. Name only what differs:
+    //   'zipMail' => ['member' => [
+    //       'url'    => '/member/main/dokumente',   // a path (CANONICAL_BASE_URL in front) or absolute
+    //       'ready'  => ['subject' => '…', 'template' => 'emails/x', 'namespace' => 'Z77\\Module\\Dms'],
+    //       'failed' => ['subject' => '…'],
+    //   ]]
+    // A template receives $documents, $size, $expires, $link, $reason; never a document name.
+    'zipMail' => [],
+
     // Background jobs this module offers to the runner (ADR-031). The key is what a
     // queue entry stores. No 'defaultSchedule': `dms-chunk-cleanup` deletes (abandoned
     // upload leftovers under data/dms/chunks), so an operator switches it on (jobs.md,
     // delete-vs-schedule rule) — every new chunked upload sweeps the same leftovers, so
     // the disk stays in check while it is off.
+    // `dms-zip-prepare` is queued by a new bundle, an idle schedule would only print every
+    // pass.
+    // `dms-zip-cleanup` deletes and DOES ship a schedule, the exception of the jobs.md rule
+    // (JOBS-SCHED-001, ADR-031 addendum, owner 2026-11-02). The duty: an expired bundle's manifest
+    // holds file names and possibly an address, and removing personal data on time must not wait
+    // for an operator's switch or for somebody opening a bundle again. It deletes only the job's
+    // own expired manifests, never a document, and the operator can switch the schedule off.
     'jobs' => [
         'dms-chunk-cleanup' => [
             'class'       => \Z77\Module\Dms\Jobs\ChunkCleanupJob::class,
             'label'       => 'DMS-Upload-Reste',
             'runAs'       => AuthRole::CRON_JOB,
             'maxAttempts' => 3,
+        ],
+        'dms-zip-prepare' => [
+            'class'       => \Z77\Module\Dms\Jobs\ZipPrepareJob::class,
+            'label'       => 'DMS-ZIP vorbereiten',
+            'runAs'       => AuthRole::CRON_JOB,
+            'maxAttempts' => 3,
+        ],
+        'dms-zip-cleanup' => [
+            'class'       => \Z77\Module\Dms\Jobs\ZipCleanupJob::class,
+            'label'       => 'DMS-ZIP-Reste',
+            'runAs'       => AuthRole::CRON_JOB,
+            'maxAttempts' => 3,
+            'defaultSchedule' => 'daily@03:50',
         ],
     ],
 

@@ -962,7 +962,7 @@ final class DocumentService
      * @throws NotFoundException   the document is unknown or not soft-deleted
      * @throws \RuntimeException    retention is still active
      */
-    public function purge(int $id): void
+    public function purge(int $id, bool $withBundles = true): void
     {
         $this->authz->require('document', $id, 'manage');
         $doc = $this->documents->find($id);
@@ -977,6 +977,13 @@ final class DocumentService
         $this->invalidateMaterialized($doc); // normally gone since the soft-delete; cheap safety
         $this->blob->delete($id);   // all variants
         $this->em->remove($doc);    // metadata record
+
+        // A ZIP bundle's manifest names the document, and a purge leaves no trace (DMS-ZIP-001).
+        // That reads every bundle's head, so a caller purging many says `withBundles: false` and
+        // hands the ids over per batch (`ZipBundleTrait::zipNotePurged()`, the trash does).
+        if ($withBundles) {
+            ZipBundleService::create()->deleteForDocuments([$id]);
+        }
     }
 
     /**
