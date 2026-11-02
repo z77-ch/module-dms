@@ -291,8 +291,8 @@ final class DocumentService
 
     /**
      * URL-safe root slug, unique among the roots AND the directories in `public/media` (`-2`/`-3`…
-     * on collision): a hand-placed directory there must not become a partition, its files would be
-     * typed as text by the partition guard.
+     * on collision): a hand-placed directory there must not become a partition, the framework
+     * would look after it as its own.
      */
     private function uniqueRootSlug(string $name): string
     {
@@ -1685,17 +1685,16 @@ final class DocumentService
              . self::executableGuardBlock();
     }
 
-    /** DMS-ACTIVE-001: inside a partition everything is plain text but the safe extensions. */
+    /**
+     * DMS-ACTIVE-001: the executable block and nosniff, and no type at the top level. A rule
+     * «everything is plain text but the safe list» took the images and PDFs along on a real host
+     * (2026-11-02, `ForceType None` did not undo it). What keeps an active type out of here is
+     * materialize(), which copies safe types only; PHP answers the others.
+     */
     private static function partitionGuardBody(): string
     {
-        $safe = implode('|', UploadTypes::STATIC_SAFE);
-
-        return "# z77 DMS (DMS-ACTIVE-001): a DMS partition — static copies only, nothing here runs or renders.\n"
+        return "# z77 DMS (DMS-ACTIVE-001): a DMS partition — static copies of safe types only, nothing here is ever run.\n"
              . "# Written by DocumentService; a changed file is replaced. Edit the framework, not this file.\n"
-             . "ForceType text/plain\n"
-             . "<FilesMatch \"(?i)\\.({$safe})\$\">\n"
-             . "    ForceType None\n"
-             . "</FilesMatch>\n"
              . self::executableGuardBlock()
              . "<IfModule mod_headers.c>\n"
              . "    Header always set X-Content-Type-Options \"nosniff\"\n"
@@ -1724,7 +1723,7 @@ final class DocumentService
         }
         [$removed, $kept] = $this->sweepPartition($root, [$slug]);
         error_log("[dms] media guard written to '{$dir}/.htaccess': {$removed} copies with an unsafe extension removed, "
-            . "{$kept} other file(s) with an unsafe extension left in place, served as text.");
+            . "{$kept} other file(s) with an unsafe extension left in place.");
     }
 
     /**
