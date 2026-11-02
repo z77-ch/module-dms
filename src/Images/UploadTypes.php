@@ -38,6 +38,17 @@ final class UploadTypes
         'shtml', 'cgi', 'pl', 'py', 'sh', 'asp', 'aspx', 'jsp', 'htaccess',
     ];
 
+    /**
+     * What the web server may deliver from a static copy under `public/media`, picking the
+     * type by extension (DMS-ACTIVE-001): rendered without script, never as a page. Everything
+     * else goes through PHP on every hit. Also the list in a partition guard's `.htaccess`.
+     */
+    public const STATIC_SAFE = [
+        'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'ico', 'pdf',
+        'mp4', 'm4v', 'webm', 'mov', 'ogv',
+        'mp3', 'm4a', 'wav', 'ogg', 'oga', 'flac', 'aac',
+    ];
+
     /** A browser renders these as a page or script — never accepted BY EXTENSION. */
     private const PAGE = ['html', 'htm', 'xhtml', 'svg', 'svgz', 'js', 'mjs'];
 
@@ -90,6 +101,12 @@ final class UploadTypes
     public static function isExecutable(?string $ext): bool
     {
         return $ext !== null && in_array(strtolower(ltrim(trim($ext), '.')), self::EXECUTABLE, true);
+    }
+
+    /** Whether the web server may deliver a static copy with this extension. */
+    public static function isStaticSafe(?string $ext): bool
+    {
+        return $ext !== null && in_array(strtolower(ltrim(trim($ext), '.')), self::STATIC_SAFE, true);
     }
 
     /** @return array<string, string> the effective list (ext => MIME), for docs and tests */

@@ -89,7 +89,8 @@ enum DocumentKind: string
 
     /**
      * Whether the delivery layer may show this inline (browser renders it natively)
-     * instead of forcing a download.
+     * instead of forcing a download. What the browser then gets is the kernel's
+     * `DeliveryPolicy`: an HTML document is shown as its source (DMS-ACTIVE-001).
      */
     public function previewable(): bool
     {

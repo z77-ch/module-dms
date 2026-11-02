@@ -4,6 +4,7 @@ namespace Z77\Module\Dms\Services;
 
 use Z77\Core\DI;
 use Z77\Core\Exception\NotFoundException;
+use Z77\Core\Http\Response\DeliveryPolicy;
 use Z77\Core\Http\Response\FileResponse;
 use Z77\Core\Libraries\Cache\DataCache;
 use Z77\Module\Dms\Blob\BlobStorage;
@@ -340,12 +341,8 @@ final class DocumentService
             throw new NotFoundException("Unknown variant '{$variantName}'.");
         }
 
-        // A variant may have a different extension than the original (a video poster is `jpg`
-        // though the video is `mp4`) — resolve the blob + MIME by the VARIANT's own extension.
         $ext  = $this->variantExt($doc, $variantName);
-        $mime = $variantName === BlobStorage::ORIGINAL
-            ? $doc->getMimeType()
-            : self::mimeForExt($ext, $doc->getMimeType());
+        $mime = $this->variantMime($doc, $variantName);
 
         $path = $this->blob->path($doc->getId(), $variantName, $ext);
         if ($path === null) {
@@ -377,6 +374,17 @@ final class DocumentService
     private function variantExt(Document $doc, string $variantName): string
     {
         return self::variantExtFromMap($variantName, $doc->getVariants(), $doc->getExt());
+    }
+
+    /**
+     * A variant may have a different extension than the original (a video poster is `jpg`
+     * though the video is `mp4`) — its MIME goes by the VARIANT's own extension.
+     */
+    private function variantMime(Document $doc, string $variantName): string
+    {
+        return $variantName === BlobStorage::ORIGINAL
+            ? $doc->getMimeType()
+            : self::mimeForExt($this->variantExt($doc, $variantName), $doc->getMimeType());
     }
 
     /** Ext of a variant from a stored variants map (entity-free twin of {@see variantExt}). */
@@ -1317,7 +1325,8 @@ final class DocumentService
      * Mutations never WRITE the copy; they only REMOVE what they made stale
      * ({@see invalidateMaterialized} for one document, {@see invalidateMaterializedFolder}
      * for a subtree). The copy stays a pure projection of blob + metadata with no own state:
-     * the whole tree may be wiped at any time and refills on demand.
+     * the copies may be wiped at any time and refill on demand. `public/media` may also hold a
+     * project's hand-placed files beside the partitions: the framework touches only partitions.
      *
      * Re-gates internally (public + active chain) so a misuse can never place a
      * protected/sealed byte in the docroot. A no-op for an unknown variant, a missing blob,
@@ -1335,6 +1344,11 @@ final class DocumentService
             // DMS-MEDIA-PHP-001: a copy under the docroot would RUN — also for a document
             // stored before uploads of such extensions were refused.
             || UploadTypes::isExecutable($this->variantExt($doc, $variant))
+            // DMS-ACTIVE-001: the web server types a copy by EXTENSION, unseen by FileResponse
+            // and without a login. Both must be safe (a JPEG polyglot may be named `.html`); SVG,
+            // HTML, XML, JS and text stay on the PHP path, where DeliveryPolicy answers every hit.
+            || !UploadTypes::isStaticSafe($this->variantExt($doc, $variant))
+            || !DeliveryPolicy::isInlineBinary($this->variantMime($doc, $variant))
             || $this->effectiveDeliveryMode($doc) !== 'public'
             || !$this->isActiveChain($doc)
         ) {
@@ -1355,6 +1369,7 @@ final class DocumentService
             throw new \RuntimeException("Materialization: cannot create directory '{$dir}'.");
         }
         self::ensureMediaGuard($this->mediaBase());
+        $this->guardPartition(explode('/', $this->folderSlugPath($doc))[0]);
         $file = $dir . '/' . $this->materializedName($doc, $variant);
         $tmp  = $file . '.' . uniqid('', true) . '.tmp';
         if (!copy($source, $tmp) || !rename($tmp, $file)) {
@@ -1405,42 +1420,161 @@ final class DocumentService
     }
 
     /**
-     * Third line of DMS-MEDIA-PHP-001 (after the refused upload and the skipped copy): an
-     * `.htaccess` in the media base that takes the script handler away from executable
-     * extensions, so even a file placed there by hand is delivered as text, never run.
-     * Handler directives only (AllowOverride FileInfo — the level the project's own
-     * `public/.htaccess` already needs for `AddHandler`); NOT a deny file — public/media
-     * IS shared/media, a deny would block every image. Written once when missing; a
-     * wiped tree gets it back with its next copy or /media request. Best-effort: an
-     * unwritable base must not break delivery (the copy throws on its own).
+     * The base guard (DMS-MEDIA-PHP-001): the `.htaccess` in the media base takes the script
+     * handler away from executable extensions, so even a file placed there by hand is delivered
+     * as text, never run. Handler level ONLY: `public/media` may hold a project's hand-placed
+     * files beside the DMS partitions (`<script src="/media/demo/…">`), and this file must not
+     * change how those are served. FileInfo directives (the level the project's own
+     * `public/.htaccess` already needs for `AddHandler`); NOT a deny file — public/media IS
+     * shared/media, a deny would block every image. Compared with its expected body: the
+     * directory is shared across releases, so an installation would otherwise keep an old rule
+     * for ever. Best-effort: an unwritable base logs and must not break delivery.
      */
     private static function ensureMediaGuard(string $base): void
     {
-        $file = $base . '/.htaccess';
-        if (is_file($file) || !is_dir($base)) {
-            return; // no media directory = nothing served from it yet
-        }
-        $ext  = implode('|', UploadTypes::EXECUTABLE);
-        $body = "# z77 DMS (DMS-MEDIA-PHP-001): static copies only — nothing here is ever run.\n"
-              . "# Written by DocumentService::materialize() when missing; edit the framework, not this file.\n"
-              . "<FilesMatch \"\\.({$ext})\$\">\n"
-              . "    SetHandler none\n"
-              . "    ForceType text/plain\n"
-              . "</FilesMatch>\n";
-        $tmp = $file . '.' . uniqid('', true) . '.tmp';
-        if (@file_put_contents($tmp, $body) === false || !@rename($tmp, $file)) {
-            @unlink($tmp);
-            error_log("[dms] cannot write the media guard '{$file}'.");
+        if (is_dir($base)) {
+            self::writeGuard($base . '/.htaccess', self::mediaGuardBody());
         }
     }
 
     /**
-     * Writes the media guard when missing — called by every `/media` request that reaches
-     * PHP (OutputController), so an installation that never materializes is covered too.
+     * Writes a guard atomically when it differs from `$body` or is missing.
+     *
+     * @return bool whether it was written just now: unchanged and unwritable both answer false
+     */
+    private static function writeGuard(string $file, string $body): bool
+    {
+        if (@file_get_contents($file) === $body) {
+            return false;
+        }
+        $tmp = $file . '.' . uniqid('', true) . '.tmp';
+        if (@file_put_contents($tmp, $body) === false || !@rename($tmp, $file)) {
+            @unlink($tmp);
+            error_log("[dms] cannot write the media guard '{$file}'.");
+            return false;
+        }
+
+        return true;
+    }
+
+    /** The block of DMS-MEDIA-PHP-001, in the form verified on a real host: do not reword it. */
+    private static function executableGuardBlock(): string
+    {
+        $exec = implode('|', UploadTypes::EXECUTABLE);
+
+        return "<FilesMatch \"\\.({$exec})\$\">\n"
+             . "    SetHandler none\n"
+             . "    ForceType text/plain\n"
+             . "</FilesMatch>\n";
+    }
+
+    private static function mediaGuardBody(): string
+    {
+        return "# z77 DMS (DMS-MEDIA-PHP-001): nothing here is ever run; any other file is served as the web server would.\n"
+             . "# Written by DocumentService; a changed file is replaced. Edit the framework, not this file.\n"
+             . self::executableGuardBlock();
+    }
+
+    /** DMS-ACTIVE-001: inside a partition everything is plain text but the safe extensions. */
+    private static function partitionGuardBody(): string
+    {
+        $safe = implode('|', UploadTypes::STATIC_SAFE);
+
+        return "# z77 DMS (DMS-ACTIVE-001): a DMS partition — static copies only, nothing here runs or renders.\n"
+             . "# Written by DocumentService; a changed file is replaced. Edit the framework, not this file.\n"
+             . "ForceType text/plain\n"
+             . "<FilesMatch \"(?i)\\.({$safe})\$\">\n"
+             . "    ForceType None\n"
+             . "</FilesMatch>\n"
+             . self::executableGuardBlock()
+             . "<IfModule mod_headers.c>\n"
+             . "    Header always set X-Content-Type-Options \"nosniff\"\n"
+             . "</IfModule>\n";
+    }
+
+    /**
+     * The guard of one DMS partition (`public/media/<slug>`, DMS-ACTIVE-001), where that
+     * directory exists. Compared per partition; when it was just written, the partition is swept
+     * once, because a copy made under the old rules would still be served by the web server. A
+     * partition directory that is itself a link is left alone, it leads out of the tree.
+     */
+    private function guardPartition(string $slug): void
+    {
+        $base = $this->mediaBase();
+        $dir  = $base . '/' . $slug;
+        if (preg_match('/^[a-z0-9_-]+$/', $slug) !== 1 || !is_dir($dir)) {
+            return;
+        }
+        $root = realpath($dir);
+        if ($root === false || $root !== realpath($base) . DIRECTORY_SEPARATOR . $slug) {
+            return;
+        }
+        if (!self::writeGuard($dir . '/.htaccess', self::partitionGuardBody())) {
+            return;
+        }
+        [$removed, $kept] = $this->sweepPartition($root, [$slug]);
+        error_log("[dms] media guard written to '{$dir}/.htaccess': {$removed} copies with an unsafe extension removed, "
+            . "{$kept} other file(s) with an unsafe extension left in place, served as text.");
+    }
+
+    /**
+     * Deletes a file below a partition ONLY when its extension is unsafe AND its path resolves to
+     * a document: provably a copy, and the next hit falls through to PHP and is answered safely.
+     * Anything else may be a developer's and stays, inert under the guard; a nested `.htaccess`
+     * too. A link is never followed: a link to a file goes like a file, only the link; a link to
+     * a directory stays, untouched. A directory counts as real only when its canonical path is
+     * its own path: PHP on Windows does not report an NTFS junction through is_link(), and a link
+     * back up the tree must not loop.
+     *
+     * @param string       $dir   canonical path
+     * @param list<string> $slugs the `/media` path of `$dir`
+     * @return array{0: int, 1: int} copies removed, other files with an unsafe extension kept
+     */
+    private function sweepPartition(string $dir, array $slugs): array
+    {
+        $removed = 0;
+        $kept    = 0;
+        foreach (@scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..' || $entry === '.htaccess') {
+                continue;
+            }
+            $path = $dir . DIRECTORY_SEPARATOR . $entry;
+            if (is_dir($path)) {
+                if (realpath($path) === $path) {
+                    [$r, $k] = $this->sweepPartition($path, [...$slugs, $entry]);
+                    $removed += $r;
+                    $kept    += $k;
+                }
+            } elseif (!UploadTypes::isStaticSafe(pathinfo($entry, PATHINFO_EXTENSION))) {
+                if ($this->resolve([...$slugs, $entry]) !== null && @unlink($path)) {
+                    $removed++;
+                } else {
+                    $kept++;
+                }
+            }
+        }
+
+        return [$removed, $kept];
+    }
+
+    /**
+     * Brings the base guard and every partition's guard up to date — called by every `/media`
+     * request that reaches PHP (OutputController) and by the Drive's list action, so an
+     * installation that never materializes is covered too. Never breaks delivery.
      */
     public function guardMedia(): void
     {
+        if (!is_dir($this->mediaBase())) {
+            return; // no media directory = nothing served from it yet
+        }
         self::ensureMediaGuard($this->mediaBase());
+        try {
+            foreach ($this->folders->findRoots() as $partition) {
+                $this->guardPartition($partition->getSlug());
+            }
+        } catch (\Throwable $e) {
+            error_log('[dms] media guard: ' . $e->getMessage());
+        }
     }
 
     /** Absolute base of the materialized files under the docroot. */

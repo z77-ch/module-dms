@@ -185,6 +185,9 @@ trait DriveControllerTrait
 
     protected function listAction(): HtmlResponse
     {
+        // DMS-ACTIVE-001: opening the Drive repairs an installation with an old media guard.
+        $this->docService()->guardMedia();
+
         $response = $this->html($this->buildViewModel(
             $this->folderParam(),
             $this->docParam(),

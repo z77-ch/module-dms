@@ -25,7 +25,9 @@ use Z77\Core\Controller\AbstractBaseController,
  *  - `public`            → served openly (no ACL); the web server normally serves the
  *                          materialized static copy and only an un-materialized public file
  *                          reaches PHP here — which then WRITES that file (lazy fill, ADR-017
- *                          rev. 2026-09-07) so the next hit is static again.
+ *                          rev. 2026-09-07) so the next hit is static again. Only a safe
+ *                          extension with a safe MIME gets a copy (DMS-ACTIVE-001); the rest
+ *                          stays on this path, every hit.
  *  - `protected`/`sealed` → `AclService::canRead()` (effective `READ` + the full `active`
  *                          chain) MUST pass BEFORE any byte; otherwise **404** (existence is
  *                          never leaked — same response as "not found").
@@ -43,8 +45,9 @@ class OutputController extends AbstractBaseController
         $slugs   = DI::getRequest()->getSlugs();
         $service = DocumentService::create();
 
-        // DMS-MEDIA-PHP-001: every /media request that reaches PHP makes sure the guard
-        // exists — also in an installation that never materializes (all protected).
+        // DMS-MEDIA-PHP-001, DMS-ACTIVE-001: every /media request that reaches PHP makes sure
+        // the current guard is there, a 404 included — also in an installation that never
+        // materializes (all protected). This is also how a deploy repairs one.
         $service->guardMedia();
 
         // Minimum shape: /media/<root-slug>/<file> — the root is a real folder (ADR-020).
