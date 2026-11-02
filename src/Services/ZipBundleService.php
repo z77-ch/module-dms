@@ -11,6 +11,7 @@ use Z77\Module\Dms\Blob\LocalBlobStorage;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Module\Dms\Zip\ZipLayout;
 use Z77\Shared\Auth\AuthUser;
+use Z77\Shared\Site\InstallationLabel;
 use Z77\Shared\Entities\JobRun;
 use Z77\Shared\Jobs\JobQueue;
 use Z77\Shared\Mail\EmailMessage;
@@ -182,8 +183,8 @@ final class ZipBundleService
     /** The framework's own mails. `zipMail` in dmsConfig replaces any field, see {@see mailSettings()}. */
     private const MAIL_DEFAULTS = [
         'url'                  => self::DRIVE_VIEW_ROUTE,
-        self::MAIL_KIND_READY  => ['subject' => 'ZIP-Download bereit', 'template' => 'emails/zipReady', 'namespace' => self::NAMESPACE],
-        self::MAIL_KIND_FAILED => ['subject' => 'ZIP-Download fehlgeschlagen', 'template' => 'emails/zipFailed', 'namespace' => self::NAMESPACE],
+        self::MAIL_KIND_READY  => ['subject' => 'ZIP-Download bereit — {absender}', 'template' => 'emails/zipReady', 'namespace' => self::NAMESPACE],
+        self::MAIL_KIND_FAILED => ['subject' => 'ZIP-Download fehlgeschlagen — {absender}', 'template' => 'emails/zipFailed', 'namespace' => self::NAMESPACE],
     ];
 
     /** Bytes hashed between two looks at the clock; the cursor is saved after each. */
@@ -282,7 +283,7 @@ final class ZipBundleService
             static fn (string $to, array $info): bool => DI::getEmailService()->send(self::mailMessage(
                 $to,
                 defined('CANONICAL_BASE_URL') ? (string) CANONICAL_BASE_URL : '',
-                $info,
+                $info + ['sender' => self::mailSender()],
                 self::mailSettings($mailConfig, (string) ($info['profile'] ?? ''))
             )),
             documentGate: $gateHook === '' ? null : static fn (int $id): bool => self::callHook($gateHook, [$id]) === true,
@@ -359,7 +360,7 @@ final class ZipBundleService
 
         return (new EmailMessage())
             ->to($to)
-            ->subject((string) $settings[$kind]['subject'])
+            ->subject(self::subjectWithSender((string) $settings[$kind]['subject'], (string) ($info['sender'] ?? '')))
             ->template((string) $settings[$kind]['template'], (string) $settings[$kind]['namespace'], [
                 'documents' => (int) $info['documents'],
                 'size'      => UploadPolicy::formatBytes((int) $info['bytes']),
@@ -367,6 +368,25 @@ final class ZipBundleService
                 'link'      => $url,
                 'reason'    => (string) ($info['reason'] ?? ''),
             ]);
+    }
+
+    /** `{absender}` in a subject; without a sender the placeholder goes with the dash before it. */
+    private static function subjectWithSender(string $subject, string $sender): string
+    {
+        $sender = trim((string) preg_replace('/[\x00-\x1f\x7f]+/', ' ', $sender));
+        if ($sender === '') {
+            return trim((string) preg_replace('/\s*[—–-]?\s*\{absender\}/u', '', $subject));
+        }
+
+        return str_replace('{absender}', $sender, $subject);
+    }
+
+    /** Who the mail says it is from: the mail account's name, else what the installation calls itself. */
+    private static function mailSender(): string
+    {
+        $name = trim((string) DI::getConfigManager()->getBaseConfig('config/mail', throwError: false)->get('fromName', ''));
+
+        return $name !== '' ? $name : InstallationLabel::current();
     }
 
     /**

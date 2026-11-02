@@ -10,6 +10,7 @@
  * @var string $link      absolute
  */
 ?>
+<p data-z77-inline="logo" style="margin:0 0 24px;"></p>
 <p>Guten Tag</p>
 
 <p>
