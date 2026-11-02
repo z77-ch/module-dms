@@ -102,6 +102,10 @@ use Z77\Shared\Upload\UploadPolicy;
  *                           bundle, at the first piece, ids only. A failure is logged, nothing more.
  *                           Where the claim cannot be saved it does not fire: once could not be
  *                           promised then, and a later piece tries again
+ *   zipDownloadEachHook     `__invoke(string $bundleId, array $documentIds): void`; on EVERY answered
+ *                           piece that starts at byte 0, after the gate, ids only: a record of each
+ *                           download begun. A repeated first piece is recorded again, and a record
+ *                           says a download began, not that it arrived. A failure is logged, nothing more
  *   zipMail                 target URL, subject and template per mail, for all or per host
  * The job has no session, so `zipDocumentGateHook` is not asked there: it outputs nothing but CRCs.
  *
@@ -219,6 +223,7 @@ final class ZipBundleService
         private ?\Closure $downloadStarted = null,
         private int $maxPerPerson = self::DEFAULT_MAX_PER_PERSON,
         private int $maxBundles = self::DEFAULT_MAX_BUNDLES,
+        private ?\Closure $downloadEach = null,
     ) {
         $this->baseDir = rtrim($baseDir, '/\\');
         $this->keepDays = max(1, $keepDays);
@@ -233,6 +238,7 @@ final class ZipBundleService
         $addressHook = (string) $config->get('zipMailAddressHook', '');
         $gateHook    = (string) $config->get('zipDocumentGateHook', '');
         $startedHook = (string) $config->get('zipDownloadStartedHook', '');
+        $eachHook    = (string) $config->get('zipDownloadEachHook', '');
         $mailConfig  = (array) $config->get('zipMail', []);
 
         return new self(
@@ -280,6 +286,9 @@ final class ZipBundleService
                 self::mailSettings($mailConfig, (string) ($info['profile'] ?? ''))
             )),
             documentGate: $gateHook === '' ? null : static fn (int $id): bool => self::callHook($gateHook, [$id]) === true,
+            downloadEach: $eachHook === '' ? null : static function (string $id, array $documentIds) use ($eachHook): void {
+                self::callHook($eachHook, [$id, $documentIds]);
+            },
             downloadStarted: $startedHook === '' ? null : static function (string $id, array $documentIds) use ($startedHook): void {
                 self::callHook($startedHook, [$id, $documentIds]);
             },
@@ -618,6 +627,9 @@ final class ZipBundleService
         $etag = self::etag($m);
         if (!$head && $range !== false && !Etag::matches($ifNoneMatch, $etag)) {
             $this->announceDownload($id, $m);
+            if ($range === null || $range[0] === 0) {
+                $this->recordDownload($id, $m);
+            }
         }
 
         return new ByteSourceResponse(
@@ -1173,6 +1185,24 @@ final class ZipBundleService
             ($this->downloadStarted)($id, array_map('intval', array_column($m['entries'], 'document')));
         } catch (\Throwable $e) {
             error_log('[dms] zipDownloadStartedHook failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Tell the host that a download from byte 0 is being answered. No claim, no state: it runs
+     * again for every such piece. A failing hook is logged and changes nothing about the download.
+     *
+     * @param array<string, mixed> $m
+     */
+    private function recordDownload(string $id, array $m): void
+    {
+        if ($this->downloadEach === null) {
+            return;
+        }
+        try {
+            ($this->downloadEach)($id, array_map('intval', array_column($m['entries'], 'document')));
+        } catch (\Throwable $e) {
+            error_log('[dms] zipDownloadEachHook failed: ' . $e->getMessage());
         }
     }
 

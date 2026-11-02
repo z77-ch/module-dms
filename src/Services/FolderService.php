@@ -96,9 +96,10 @@ final class FolderService
         $this->requirePartitionGate($folder); // partition lifecycle = SUPER_USER (ADR-021/D5)
         $this->assertName($name);
 
-        $this->documents->invalidateMaterializedFolder($id); // slug change → old descendant media paths, BEFORE re-slug
+        $this->documents->invalidateMaterializedFolder($id, pathGoesAway: true); // slug change → old descendant media paths, BEFORE re-slug
+        $ownSlug = $folder->getSlug();
         $folder->setName($name);
-        $folder->setSlug($this->uniqueSlug($folder));
+        $folder->setSlug($this->uniqueSlug($folder, $ownSlug));
         $this->em->persist($folder);
         $this->em->flush();
 
@@ -134,7 +135,11 @@ final class FolderService
             throw new \InvalidArgumentException('Ein Ordner kann nicht in sich selbst oder einen Unterordner verschoben werden.');
         }
 
-        $this->documents->invalidateMaterializedFolder($id); // reparent → old descendant media paths, BEFORE the change
+        if ($folder->getParentId() === $targetId) {
+            return $folder; // it stands there already: no path changes, no copy goes, the slug stays
+        }
+
+        $this->documents->invalidateMaterializedFolder($id, pathGoesAway: true); // reparent → old descendant media paths, BEFORE the change
         $folder->setParentId($targetId);
         $folder->setSlug($this->uniqueSlug($folder)); // re-unique among the new siblings
         $this->em->persist($folder);
@@ -234,7 +239,7 @@ final class FolderService
             throw new \RuntimeException($reason);
         }
         $parentId = $folder->getParentId();
-        $this->documents->invalidateMaterializedFolder($id); // an empty folder may still own an empty media directory
+        $this->documents->invalidateMaterializedFolder($id, pathGoesAway: true); // an empty folder may still own an empty media directory
         $this->em->remove($folder);
 
         return $parentId;
@@ -321,7 +326,7 @@ final class FolderService
     }
 
     /** URL-safe slug, unique among siblings (same parent, self excluded), `-2`/`-3`… on collision. */
-    private function uniqueSlug(Folder $folder): string
+    private function uniqueSlug(Folder $folder, ?string $ownSlug = null): string
     {
         $base = Naming::toSlug($folder->getName());
         if ($base === '') {
@@ -333,9 +338,12 @@ final class FolderService
                 $taken[$sibling->getSlug()] = true;
             }
         }
+        // A partition's slug is the first segment of the `/media` path: it must not take over a
+        // hand-placed directory there. A partition keeping its slug through a rename keeps its own.
+        $isPartition = $folder->getParentId() === (int) $this->documents->driveRoot()->getId();
         $slug = $base;
         $n    = 2;
-        while (isset($taken[$slug])) {
+        while (isset($taken[$slug]) || ($isPartition && $slug !== $ownSlug && $this->documents->mediaDirectoryExists($slug))) {
             $slug = $base . '-' . $n++;
         }
         return $slug;

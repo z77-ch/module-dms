@@ -289,7 +289,11 @@ final class DocumentService
         );
     }
 
-    /** URL-safe root slug, unique among the roots (`-2`/`-3`… on collision). */
+    /**
+     * URL-safe root slug, unique among the roots AND the directories in `public/media` (`-2`/`-3`…
+     * on collision): a hand-placed directory there must not become a partition, its files would be
+     * typed as text by the partition guard.
+     */
     private function uniqueRootSlug(string $name): string
     {
         $base = Naming::toSlug($name);
@@ -302,11 +306,23 @@ final class DocumentService
         }
         $slug = $base;
         $n    = 2;
-        while (isset($taken[$slug])) {
+        while (isset($taken[$slug]) || $this->mediaDirectoryExists($slug)) {
             $slug = $base . '-' . $n++;
         }
 
         return $slug;
+    }
+
+    /**
+     * Is `public/media/<slug>` taken on the disk, a link included? A partition's slug must avoid it:
+     * the slug is the first segment of the `/media` path. Asked for a NEW slug only: a partition's
+     * own directory is its own.
+     */
+    public function mediaDirectoryExists(string $slug): bool
+    {
+        $path = $this->mediaBase() . '/' . $slug;
+
+        return file_exists($path) || is_link($path);
     }
 
     /** Next free sortKey at the top level (appended after the existing roots). */
@@ -1368,6 +1384,11 @@ final class DocumentService
         if ($dir === null) {
             return; // no public address (S5: corrupt chain / unslugged) — never a write into the base
         }
+        // A copy behind a link could not be removed again: the invalidation does not follow links.
+        // No copy there, PHP answers every hit behind its gate.
+        if (!$this->mediaPathIsOwn($this->folderSlugPath($doc))) {
+            return;
+        }
         $source = $this->blob->path($doc->getId(), $variant, $this->variantExt($doc, $variant));
         if ($source === null) {
             return;
@@ -1400,30 +1421,212 @@ final class DocumentService
         if ($dir === null || !is_dir($dir)) {
             return;
         }
+        $stuck = [];
         foreach (array_merge([BlobStorage::ORIGINAL], array_keys($doc->getVariants())) as $variant) {
             $file = $dir . '/' . $this->materializedName($doc, $variant);
-            if (is_file($file)) {
-                @unlink($file);
+            if (is_file($file) && !$this->removeCopy($file)) {
+                $stuck[] = $file;
             }
         }
+        $this->reportStuckCopies($stuck);
     }
 
     /**
-     * Remove the materialized subtree of a folder (its whole `public/media/<chain>` directory).
-     * For folder-level changes whose effect spans descendants: slug/parent change (paths move),
-     * `deliveryMode`/`active` (inherited gate). Same ordering rule as
-     * {@see invalidateMaterialized}: BEFORE a path change, AFTER the flush of a gate change.
+     * Remove the copies of a folder and its subfolders from `public/media/<chain>`, for
+     * folder-level changes whose effect spans descendants: slug/parent change (paths move),
+     * delete, `deliveryMode`/`active` (inherited gate). Same ordering rule as
+     * {@see invalidateMaterialized}: BEFORE a path change, AFTER the flush of a gate change,
+     * because the list of copies is derived from the folders' slugs and documents as they stand.
+     *
+     * Only copies go ({@see isCopyOf}): the directory may hold a project's hand-placed files, they
+     * stay, and so does the partition guard that keeps them inert. A link is never followed, also
+     * not as the folder's own directory; {@see materialize} writes no copy behind one. Directories
+     * left empty are removed. With $pathGoesAway (rename, move, delete) a partition directory
+     * holding nothing but its own guard goes too: nothing is left to protect there.
      *
      * Wipe guard (S5): the drive root or a broken chain yields no path → nothing is removed;
      * `public/media` itself is never a target and the path is never data-driven beyond slugs.
      */
-    public function invalidateMaterializedFolder(int $folderId): void
+    public function invalidateMaterializedFolder(int $folderId, bool $pathGoesAway = false): void
     {
         $relPath = $this->folderSlugPathFor($folderId);
         if ($relPath === '' || str_contains($relPath, '..')) {
             return;
         }
-        $this->rrmdir($this->mediaBase() . '/' . $relPath);
+        if (!$this->mediaPathIsOwn($relPath)) {
+            error_log("[dms] media: '{$relPath}' is a link, not followed; any copy there stays until removed by hand.");
+            return;
+        }
+        $dir = $this->mediaBase() . '/' . $relPath;
+        if (!is_dir($dir)) {
+            return;
+        }
+        $stuck = $this->removeCopies($folderId, $dir);
+        $this->reportStuckCopies($stuck);
+        $this->pruneEmptyDirectories($dir);
+        if ($pathGoesAway && !str_contains($relPath, '/')) {
+            $this->removeBareGuard($dir);
+        }
+    }
+
+    /** Is every existing segment of a `/media` path a real directory? False at the first link, an NTFS junction too. */
+    private function mediaPathIsOwn(string $relPath): bool
+    {
+        $current = realpath($this->mediaBase());
+        if ($current === false) {
+            return true; // no base yet: nothing there to be a link
+        }
+        foreach (explode('/', $relPath) as $segment) {
+            $next = $current . DIRECTORY_SEPARATOR . $segment;
+            if (!file_exists($next) && !is_link($next)) {
+                return true; // nothing further exists
+            }
+            if (is_link($next) || realpath($next) !== $next) {
+                return false;
+            }
+            $current = $next;
+        }
+
+        return true;
+    }
+
+    /**
+     * The folder's copies in $dir, then its subfolders' in their directories. Never through a link.
+     *
+     * @return list<string> the copies that could not be removed
+     */
+    private function removeCopies(int $folderId, string $dir): array
+    {
+        $stuck = [];
+        $docs  = $this->documents->findByFolder($folderId); // the trash too: its copies must not stay either
+        foreach (@scandir($dir) ?: [] as $entry) {
+            $path = $dir . '/' . $entry;
+            // A link to a file goes like a file, only the link.
+            if ($entry !== '.' && $entry !== '..' && !is_dir($path) && $this->isCopyOf($entry, $docs) && !$this->removeCopy($path)) {
+                $stuck[] = $path;
+            }
+        }
+        foreach ($this->folders->findAll() as $child) {
+            if ($child->getParentId() !== $folderId || $child->getSlug() === '') {
+                continue;
+            }
+            $childDir = $dir . '/' . $child->getSlug();
+            if (is_dir($childDir) && !is_link($childDir) && realpath($childDir) === realpath($dir) . DIRECTORY_SEPARATOR . $child->getSlug()) {
+                $stuck = array_merge($stuck, $this->removeCopies((int) $child->getId(), $childDir));
+            }
+        }
+
+        return $stuck;
+    }
+
+    /**
+     * Deletes one copy. A read-only file is made writable first: on Windows that alone refuses the
+     * delete. Nothing stronger is tried: emptying the file would leave a broken image that the web
+     * server keeps serving and no later hit repairs, and the directory's rights are the host's.
+     */
+    private function removeCopy(string $path): bool
+    {
+        if (@unlink($path)) {
+            return true;
+        }
+        @chmod($path, 0644);
+        clearstatcache(true, $path);
+
+        return @unlink($path) || (!file_exists($path) && !is_link($path));
+    }
+
+    /**
+     * A copy left behind is served by the web server, past every gate: the change happened in the
+     * store, but the document may still be reachable. So it is never a plain success: a log line
+     * per path, and a message that stays until closed in the answer of the action, beside its own
+     * success. The answer is the action's, it keeps its status: the store did change, a repeat
+     * cannot help, and only someone with access to the server can.
+     *
+     * @param list<string> $paths
+     */
+    private function reportStuckCopies(array $paths): void
+    {
+        if ($paths === []) {
+            return;
+        }
+        $urls = [];
+        foreach ($paths as $path) {
+            error_log("[dms] media: cannot remove the copy '{$path}'; the web server may keep serving it. Delete it on the server.");
+            $urls[] = '/media/' . substr($path, strlen($this->mediaBase()) + 1);
+        }
+        $shown = implode(', ', array_slice($urls, 0, 5)) . (count($urls) > 5 ? ' und ' . (count($urls) - 5) . ' weitere' : '');
+        try {
+            DI::getMessageService()->pushMessage('error', (count($urls) === 1
+                ? 'Eine öffentliche Kopie konnte nicht entfernt werden und ist möglicherweise noch erreichbar: '
+                : count($urls) . ' öffentliche Kopien konnten nicht entfernt werden und sind möglicherweise noch erreichbar: ')
+                . $shown . '. Bitte auf dem Server löschen oder die Rechte prüfen.');
+        } catch (\Throwable) {
+            // No request behind this call (a job, a harness): the log line stands.
+        }
+    }
+
+    /**
+     * Is this file name a copy of one of the folder's documents? Its exact name as a copy of the
+     * original or a current variant, whatever the extension: a copy made under older rules counts.
+     * Or `<slug>.<ext>` / `<slug>.<word>.<ext>` on a safe extension: a variant the document no
+     * longer lists or an earlier format would otherwise be served for good. A hand-placed file
+     * named like that beside the document goes with it (documents.md DMS-INVALIDATE-001).
+     *
+     * @param Document[] $docs
+     */
+    private function isCopyOf(string $entry, array $docs): bool
+    {
+        foreach ($docs as $doc) {
+            $slug = $doc->getSlug();
+            if ($slug === '') {
+                continue;
+            }
+            if ($entry === $this->materializedName($doc, BlobStorage::ORIGINAL)) {
+                return true;
+            }
+            foreach (array_keys($doc->getVariants()) as $variant) {
+                if ($entry === $this->materializedName($doc, $variant)) {
+                    return true;
+                }
+            }
+            if (str_starts_with($entry, $slug . '.')
+                && UploadTypes::isStaticSafe(pathinfo($entry, PATHINFO_EXTENSION))
+                && substr_count(substr($entry, strlen($slug) + 1), '.') <= 1
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Removes empty real directories below and at $dir, deepest first. Never through a link. */
+    private function pruneEmptyDirectories(string $dir): void
+    {
+        $canonical = realpath($dir);
+        foreach (@scandir($dir) ?: [] as $entry) {
+            $path = $dir . '/' . $entry;
+            if ($entry !== '.' && $entry !== '..' && is_dir($path) && !is_link($path)
+                && realpath($path) === $canonical . DIRECTORY_SEPARATOR . $entry
+            ) {
+                $this->pruneEmptyDirectories($path);
+            }
+        }
+        if (array_values(array_diff(@scandir($dir) ?: ['x'], ['.', '..'])) === []) {
+            @rmdir($dir);
+        }
+    }
+
+    /** A partition directory whose only content is the guard this code wrote: remove both. */
+    private function removeBareGuard(string $dir): void
+    {
+        if (is_dir($dir)
+            && array_values(array_diff(@scandir($dir) ?: [], ['.', '..'])) === ['.htaccess']
+            && @file_get_contents($dir . '/.htaccess') === self::partitionGuardBody()
+        ) {
+            @unlink($dir . '/.htaccess');
+            @rmdir($dir);
+        }
     }
 
     /**
@@ -1806,25 +2009,6 @@ final class DocumentService
         return implode('/', $slugs);
     }
 
-    /** Recursively remove a directory (materialization cleanup). */
-    private function rrmdir(string $dir): void
-    {
-        if (!is_dir($dir)) {
-            return;
-        }
-        foreach (scandir($dir) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $path = $dir . '/' . $entry;
-            if (is_dir($path)) {
-                $this->rrmdir($path);
-            } else {
-                @unlink($path);
-            }
-        }
-        @rmdir($dir);
-    }
 
     /**
      * Keep only live documents.

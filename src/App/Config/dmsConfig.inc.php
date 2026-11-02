@@ -110,6 +110,12 @@ return [
     //   `__invoke(string $bundleId, array $documentIds): void`
     'zipDownloadStartedHook' => null,
 
+    // On EVERY answered piece that starts at byte 0, after the gate: a record of each download
+    // begun, ids only. A repeated first piece is recorded again, and a record does not say the
+    // download arrived. A failure is logged and the download goes on.
+    //   `__invoke(string $bundleId, array $documentIds): void`
+    'zipDownloadEachHook' => null,
+
     // The ZIP's mails. `default` for the whole installation, any other key for a host whose
     // controller answers it from `zipMailProfile()`. Name only what differs:
     //   'zipMail' => ['member' => [
