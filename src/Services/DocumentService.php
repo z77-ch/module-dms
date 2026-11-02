@@ -15,6 +15,7 @@ use Z77\Module\Dms\Images\UploadTypes;
 use Z77\Module\Dms\Entities\AccessControlEntry;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Module\Dms\Entities\Folder;
+use Z77\Module\Dms\ValueObjects\ActivityEvent;
 use Z77\Shared\Mail\Attachment;
 use Z77\Shared\Mail\Mailer;
 use Z77\Shared\Mail\Message;
@@ -261,6 +262,7 @@ final class DocumentService
         $folder->setSortKey($this->nextRootSortKey());
         $this->em->persist($folder);
         $this->em->flush();
+        ActivityLog::folder(ActivityEvent::FOLDER_CREATED, (int) $folder->getId(), $folder->getParentId());
 
         // S3 (TOCTOU): a concurrent create may have won — re-resolve deterministically.
         $winner = $this->folders->findRootByKey($key);
@@ -343,10 +345,15 @@ final class DocumentService
      * image derivative (null = the original); `$download` forces an attachment instead
      * of inline display.
      *
+     * The original is reported to `dmsConfig['activityHook']`, at its first piece
+     * ({@see ActivityLog::delivered}): a caller holding a gate of its own is covered. A variant
+     * never is, and `$report: false` is for the anonymous public `/media` delivery, which is
+     * nobody's action (DMS-ACTIVITY-001).
+     *
      * @throws NotFoundException when the document is deleted, the variant is unknown,
      *                           or the bytes are missing
      */
-    public function serve(Document $doc, ?string $variant = null, bool $download = false, ?string $cacheControl = null): FileResponse
+    public function serve(Document $doc, ?string $variant = null, bool $download = false, ?string $cacheControl = null, bool $report = true): FileResponse
     {
         if ($doc->isDeleted()) {
             throw new NotFoundException('Document not found.');
@@ -365,15 +372,27 @@ final class DocumentService
             throw new NotFoundException('Document bytes not found.');
         }
 
+        // A type allowed by extension only (F4) is never rendered by a browser.
+        $attachment = $download || DocumentKind::tryFrom($doc->getKind())?->alwaysDownload();
+        $etag       = $doc->getChecksum() . '-' . $variantName;
+
+        if ($report && $variantName === BlobStorage::ORIGINAL) {
+            ActivityLog::delivered(
+                // What the browser gets, not what was asked: the output policy may force a download.
+                $attachment || !DeliveryPolicy::allowsInline($mime) ? ActivityEvent::DOCUMENT_DOWNLOADED : ActivityEvent::DOCUMENT_OPENED,
+                (int) $doc->getId(),
+                $doc->getFolderId(),
+                $path,
+                $etag,
+            );
+        }
+
         return new FileResponse(
             path: $path,
             filename: $doc->getOriginalName(),
             mimeType: $mime,
-            // A type allowed by extension only (F4) is never rendered by a browser.
-            disposition: $download || DocumentKind::tryFrom($doc->getKind())?->alwaysDownload()
-                ? FileResponse::ATTACHMENT
-                : FileResponse::INLINE,
-            etag: $doc->getChecksum() . '-' . $variantName,
+            disposition: $attachment ? FileResponse::ATTACHMENT : FileResponse::INLINE,
+            etag: $etag,
             // Default to the safe (private) policy; the public `/media` branch passes an
             // explicit immutable `cacheControl` (OutputController).
             cacheControl: $cacheControl ?? 'private, no-cache',
@@ -815,10 +834,14 @@ final class DocumentService
             return;
         }
 
+        $unchanged = $displayName === $doc->getDisplayName();
         $doc->setDisplayName($displayName);
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
+        if (!$unchanged) {
+            ActivityLog::document(ActivityEvent::DOCUMENT_RENAMED, $id, $doc->getFolderId());
+        }
     }
 
     /**
@@ -923,6 +946,7 @@ final class DocumentService
         $this->em->persist($doc);
         $this->em->flush();
         $this->invalidateMaterialized($doc); // AFTER the flush: a racing lazy fill re-gates on the new state
+        ActivityLog::document(ActivityEvent::DOCUMENT_DELETED, $id, $doc->getFolderId());
     }
 
     /**
@@ -968,6 +992,7 @@ final class DocumentService
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush(); // a public one refills lazily on its next hit
+        ActivityLog::document(ActivityEvent::DOCUMENT_RESTORED, $id, $folderId);
     }
 
     /**
@@ -993,6 +1018,7 @@ final class DocumentService
         $this->invalidateMaterialized($doc); // normally gone since the soft-delete; cheap safety
         $this->blob->delete($id);   // all variants
         $this->em->remove($doc);    // metadata record
+        ActivityLog::document(ActivityEvent::DOCUMENT_PURGED, $id, $doc->getFolderId()); // it is gone, whatever the bundles do
 
         // A ZIP bundle's manifest names the document, and a purge leaves no trace (DMS-ZIP-001).
         // That reads every bundle's head, so a caller purging many says `withBundles: false` and
@@ -1033,11 +1059,15 @@ final class DocumentService
         $this->authz->require('folder', $folderId, 'write');
 
         $this->invalidateMaterialized($doc); // at the OLD path — before the folder changes
+        $from = $doc->getFolderId();
         $doc->setFolderId($folderId);
         $doc->setSortKey($this->documents->nextSortKey($folderId)); // manual order: append at the end of the target
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
+        if ($from !== $folderId) { // into its own folder it only goes to the end of the list
+            ActivityLog::document(ActivityEvent::DOCUMENT_MOVED, $id, $folderId, $from);
+        }
     }
 
     /**

@@ -116,6 +116,15 @@ return [
     //   `__invoke(string $bundleId, array $documentIds): void`
     'zipDownloadEachHook' => null,
 
+    // One receiver for every file action of the DMS, so a project can keep its own activity log,
+    // the backend Drive included (DMS-ACTIVITY-001). FQCN of an invokable with no constructor
+    // argument, ids only:
+    //   `__invoke(\Z77\Module\Dms\ValueObjects\ActivityEvent $event): void`
+    // Called after the action succeeded, never for a refused one. A record, not a gate: a missing
+    // class, a wrong type or a hook that throws is logged and the action goes on. Null = nothing
+    // happens and nothing is looked up ({@see \Z77\Module\Dms\Services\ActivityLog}).
+    'activityHook' => null,
+
     // The ZIP's mails. `default` for the whole installation, any other key for a host whose
     // controller answers it from `zipMailProfile()`. Name only what differs:
     //   'zipMail' => ['member' => [

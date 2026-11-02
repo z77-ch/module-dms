@@ -11,6 +11,7 @@ use Z77\Module\Dms\Images\ImageProcessor;
 use Z77\Module\Dms\Images\ImageProfileRegistry;
 use Z77\Module\Dms\Images\UploadTypes;
 use Z77\Module\Dms\Entities\Document;
+use Z77\Module\Dms\ValueObjects\ActivityEvent;
 use Z77\Shared\Libraries\Convention\Naming;
 use Z77\Shared\ValueObjects\UploadedFile;
 
@@ -118,6 +119,8 @@ final class SaveService
             }
         }
 
+        ActivityLog::document($req->source === 'generated' ? ActivityEvent::DOCUMENT_GENERATED : ActivityEvent::DOCUMENT_UPLOADED, (int) $id, $req->folderId);
+
         return $doc;
     }
 
@@ -222,6 +225,8 @@ final class SaveService
             }
         }
 
+        ActivityLog::document(ActivityEvent::DOCUMENT_UPLOADED, $id, $req->folderId);
+
         return $doc;
     }
 
@@ -278,6 +283,7 @@ final class SaveService
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
+        ActivityLog::document(ActivityEvent::DOCUMENT_OVERWRITTEN, $id, $doc->getFolderId());
 
         return $doc;
     }
@@ -356,6 +362,7 @@ final class SaveService
         $doc->setUpdatedAt(gmdate('c'));
         $this->em->persist($doc);
         $this->em->flush();
+        ActivityLog::document(ActivityEvent::DOCUMENT_OVERWRITTEN, $id, $doc->getFolderId());
 
         return $doc;
     }

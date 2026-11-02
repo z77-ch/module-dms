@@ -8,6 +8,7 @@ use Z77\Persistence\Resolver\UnifiedEntityManager;
 use Z77\Module\Dms\Entities\Folder;
 use Z77\Module\Dms\Images\ImageProfileRegistry;
 use Z77\Module\Dms\Repositories\FolderRepository;
+use Z77\Module\Dms\ValueObjects\ActivityEvent;
 use Z77\Shared\Libraries\Convention\Naming;
 use Z77\Shared\Tree\TreeService;
 
@@ -83,6 +84,7 @@ final class FolderService
         $folder->setSlug($this->uniqueSlug($folder));
         $this->em->persist($folder);
         $this->em->flush();
+        ActivityLog::folder(ActivityEvent::FOLDER_CREATED, (int) $folder->getId(), $parentId);
 
         return $folder;
     }
@@ -97,11 +99,15 @@ final class FolderService
         $this->assertName($name);
 
         $this->documents->invalidateMaterializedFolder($id, pathGoesAway: true); // slug change → old descendant media paths, BEFORE re-slug
-        $ownSlug = $folder->getSlug();
+        $ownSlug   = $folder->getSlug();
+        $unchanged = $name === $folder->getName();
         $folder->setName($name);
         $folder->setSlug($this->uniqueSlug($folder, $ownSlug));
         $this->em->persist($folder);
         $this->em->flush();
+        if (!$unchanged) {
+            ActivityLog::folder(ActivityEvent::FOLDER_RENAMED, $id, $folder->getParentId());
+        }
 
         return $folder;
     }
@@ -140,10 +146,12 @@ final class FolderService
         }
 
         $this->documents->invalidateMaterializedFolder($id, pathGoesAway: true); // reparent → old descendant media paths, BEFORE the change
+        $from = $folder->getParentId();
         $folder->setParentId($targetId);
         $folder->setSlug($this->uniqueSlug($folder)); // re-unique among the new siblings
         $this->em->persist($folder);
         $this->em->flush();
+        ActivityLog::folder(ActivityEvent::FOLDER_MOVED, $id, $targetId, $from);
 
         return $folder;
     }
@@ -229,7 +237,11 @@ final class FolderService
         return $folder;
     }
 
-    /** Delete a folder (only when empty and not a system folder). Returns the former parent id. */
+    /**
+     * Delete a folder (only when empty and not a system folder). Returns the former parent id.
+     * Reports the folder alone: {@see blockReason} refuses a folder with live documents, nothing
+     * goes with it. What already lies in the trash stays there and was reported when it went.
+     */
     public function delete(int $id): ?int
     {
         $this->authz->require('folder', $id, 'manage');
@@ -241,6 +253,7 @@ final class FolderService
         $parentId = $folder->getParentId();
         $this->documents->invalidateMaterializedFolder($id, pathGoesAway: true); // an empty folder may still own an empty media directory
         $this->em->remove($folder);
+        ActivityLog::folder(ActivityEvent::FOLDER_DELETED, $id, $parentId);
 
         return $parentId;
     }

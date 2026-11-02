@@ -81,6 +81,7 @@ class OutputController extends AbstractBaseController
                 error_log('[dms] ' . $e->getMessage());
             }
             $cacheControl = 'public, max-age=31536000, immutable';
+            $report       = false; // the anonymous world: nobody's action, and a static copy never reaches PHP
         } else {
             // protected / sealed — effective READ + the full active chain, BEFORE bytes.
             $principal = Principal::fromAuthUser(DI::getAuthService()->getCurrentUser());
@@ -88,10 +89,11 @@ class OutputController extends AbstractBaseController
                 throw new NotFoundException('Media not found.');
             }
             $cacheControl = 'private, no-cache';
+            $report       = true; // a gated original went to somebody (DMS-ACTIVITY-001)
         }
 
         $variantArg = $variant === BlobStorage::ORIGINAL ? null : $variant;
 
-        return $service->serve($doc, $variantArg, download: false, cacheControl: $cacheControl);
+        return $service->serve($doc, $variantArg, download: false, cacheControl: $cacheControl, report: $report);
     }
 }

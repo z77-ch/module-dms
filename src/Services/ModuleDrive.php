@@ -5,6 +5,7 @@ namespace Z77\Module\Dms\Services;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Module\Dms\Entities\Folder;
 use Z77\Module\Dms\Repositories\FolderRepository;
+use Z77\Module\Dms\ValueObjects\ActivityEvent;
 use Z77\Persistence\Resolver\UnifiedEntityManager;
 use Z77\Shared\Libraries\Convention\Naming;
 
@@ -116,6 +117,7 @@ final class ModuleDrive
         $folder->setSortKey($this->nextSortKey($parent));
         $this->em->persist($folder);
         $this->em->flush();
+        ActivityLog::folder(ActivityEvent::FOLDER_CREATED, (int) $folder->getId(), $parent->getId());
 
         return $folder;
     }
