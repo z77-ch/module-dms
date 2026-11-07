@@ -183,8 +183,9 @@ final class ZipBundleService
     /** The framework's own mails. `zipMail` in dmsConfig replaces any field, see {@see mailSettings()}. */
     private const MAIL_DEFAULTS = [
         'url'                  => self::DRIVE_VIEW_ROUTE,
-        self::MAIL_KIND_READY  => ['subject' => 'ZIP-Download bereit — {absender}', 'template' => 'emails/zipReady', 'namespace' => self::NAMESPACE],
-        self::MAIL_KIND_FAILED => ['subject' => 'ZIP-Download fehlgeschlagen — {absender}', 'template' => 'emails/zipFailed', 'namespace' => self::NAMESPACE],
+        // Subjects are dictionary keys (res/i18n, ADR-056) — «ZIP-Download bereit — {absender}».
+        self::MAIL_KIND_READY  => ['subject' => 'dms.mail.zipReady.subject', 'template' => 'emails/zipReady', 'namespace' => self::NAMESPACE],
+        self::MAIL_KIND_FAILED => ['subject' => 'dms.mail.zipFailed.subject', 'template' => 'emails/zipFailed', 'namespace' => self::NAMESPACE],
     ];
 
     /** Bytes hashed between two looks at the clock; the cursor is saved after each. */
@@ -358,16 +359,61 @@ final class ZipBundleService
             $url = $base . '/' . ltrim($url, '/');
         }
 
+        // ADR-056: in the language the bundle was asked for in ('' = the current one). The
+        // subject is a dictionary key by default (`dms.mail.zip*.subject`); a host's own
+        // literal subject in `dmsConfig['zipMail']` is no key and comes back unchanged.
+        $language = trim((string) ($info['language'] ?? '')) !== '' ? (string) $info['language'] : null;
+
         return (new EmailMessage())
             ->to($to)
-            ->subject(self::subjectWithSender((string) $settings[$kind]['subject'], (string) ($info['sender'] ?? '')))
+            ->language($language)
+            ->subject(self::subjectWithSender(t((string) $settings[$kind]['subject'], [], $language), (string) ($info['sender'] ?? '')))
             ->template((string) $settings[$kind]['template'], (string) $settings[$kind]['namespace'], [
                 'documents' => (int) $info['documents'],
                 'size'      => UploadPolicy::formatBytes((int) $info['bytes']),
                 'expires'   => date('d.m.Y', (int) $info['expires']),
                 'link'      => $url,
-                'reason'    => (string) ($info['reason'] ?? ''),
+                // A stored key (or an old manifest's German sentence), in the mail's language.
+                'reason'    => trim((string) ($info['reason'] ?? '')) === '' ? '' : t((string) $info['reason'], [], $language),
             ]);
+    }
+
+    /**
+     * A sentence stored in a manifest, in the current language (ADR-056). Since 2026-11-07 the
+     * manifest keeps a dictionary KEY (`dms.zip.fail.*`, `dms.zip.mail.*`), written by a job that
+     * has no reader's language; `t()` gives an older manifest's German sentence back unchanged.
+     */
+    private static function stored(mixed $value, string $fallbackKey): string
+    {
+        $value = trim((string) $value);
+
+        return t($value !== '' ? $value : $fallbackKey);
+    }
+
+    /**
+     * The mail block as the person sees it: no address, the failure in her language.
+     *
+     * @param array<string, mixed> $mail
+     * @return array<string, mixed>
+     */
+    private static function mailView(array $mail): array
+    {
+        $mail = array_diff_key($mail, ['to' => true]);
+        if (isset($mail['error'])) {
+            $mail['error'] = self::stored($mail['error'], 'dms.zip.mail.failed');
+        }
+
+        return $mail;
+    }
+
+    /** The language of the asking page, '' where none answers (a harness, the CLI). */
+    private static function requestLanguage(): string
+    {
+        try {
+            return DI::getTranslator()->currentLanguage();
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     /** `{absender}` in a subject; without a sender the placeholder goes with the dash before it. */
@@ -408,20 +454,20 @@ final class ZipBundleService
     {
         $owner = ($this->owner)();
         if ($owner === '') {
-            throw new ZipBundleException('Bitte zuerst anmelden.', 403);
+            throw new ZipBundleException(t('dms.loginFirst'), 403);
         }
 
         $ids = array_values(array_unique(array_filter(array_map('intval', $documentIds), static fn (int $id): bool => $id > 0)));
         if ($ids === []) {
-            throw new ZipBundleException('Keine Dokumente gewählt.', 400);
+            throw new ZipBundleException(t('dms.zip.noneChosen'), 400);
         }
         if (count($ids) > self::MAX_DOCUMENTS) {
-            throw new ZipBundleException('Höchstens ' . self::MAX_DOCUMENTS . ' Dokumente pro ZIP.', 400);
+            throw new ZipBundleException(t('dms.zip.tooMany', ['max' => self::MAX_DOCUMENTS]), 400);
         }
 
         [$entries, $skipped, $denied] = $this->collect($ids);
         if ($entries === []) {
-            throw new ZipBundleException('Keines der gewählten Dokumente lässt sich packen.', 422);
+            throw new ZipBundleException(t('dms.zip.nothingPackable'), 422);
         }
 
         $bytes   = array_sum(array_column($entries, 'size'));
@@ -452,7 +498,9 @@ final class ZipBundleService
             'skipped' => $skipped,
             'denied'  => $denied,
             'cursor'  => ['file' => 0, 'offset' => 0, 'hash' => null],
-            'mail'    => $address !== '' ? ['state' => self::MAIL_PENDING, 'to' => $address] : ['state' => self::MAIL_NONE],
+            // The language of the page that asked — the person's (ADR-056: a member area that
+            // renders accounts in their own language). The job has no request to ask later.
+            'mail'    => $address !== '' ? ['state' => self::MAIL_PENDING, 'to' => $address, 'language' => self::requestLanguage()] : ['state' => self::MAIL_NONE],
             'mailProfile' => preg_match('/^[a-zA-Z0-9._-]{1,40}$/D', $mailProfile) === 1 ? $mailProfile : '',
             'error'   => null,
         ];
@@ -533,13 +581,13 @@ final class ZipBundleService
             }
 
             if ($own >= $this->maxPerPerson) {
-                throw new ZipBundleException('Es gibt bereits ' . $own . ' ZIP. Ein weiteres ist möglich, sobald eines gelöscht oder abgelaufen ist.', 429);
+                throw new ZipBundleException(t('dms.zip.limitOwn', ['count' => $own]), 429);
             }
             if ($total >= $this->maxBundles) {
-                throw new ZipBundleException('Zurzeit sind zu viele ZIP vorhanden. Ein weiteres ist möglich, sobald andere abgelaufen sind.', 429);
+                throw new ZipBundleException(t('dms.zip.limitAll'), 429);
             }
             if (!$instant && $unfinished >= self::MAX_UNFINISHED) {
-                throw new ZipBundleException('Es werden bereits ' . self::MAX_UNFINISHED . ' ZIP vorbereitet. Ein weiteres ist möglich, sobald eines bereit ist.', 429);
+                throw new ZipBundleException(t('dms.zip.limitUnfinished', ['count' => self::MAX_UNFINISHED]), 429);
             }
 
             $dir = $this->baseDir . '/' . $m['id'];
@@ -631,7 +679,7 @@ final class ZipBundleService
         $m = $this->owned($id);
         if ($m['state'] !== self::STATE_READY) {
             throw new ZipBundleException(
-                $m['state'] === self::STATE_FAILED ? (string) ($m['error'] ?? 'Dieses ZIP konnte nicht erstellt werden.') : 'Dieses ZIP ist noch nicht bereit.',
+                $m['state'] === self::STATE_FAILED ? self::stored($m['error'] ?? null, 'dms.zip.failed') : t('dms.zip.notReady'),
                 409
             );
         }
@@ -945,7 +993,7 @@ final class ZipBundleService
             $state = $this->hashOn($id, $m, $hasTime, $token);
         } catch (\Throwable $e) {
             error_log("[dms] zip bundle {$id}: " . $e->getMessage());
-            $state = $this->fail($id, $m, $token, 'Das ZIP konnte nicht erstellt werden.');
+            $state = $this->fail($id, $m, $token, 'dms.zip.fail.generic');
         }
         if ($state === self::STATE_READY || $state === self::STATE_FAILED) {
             $this->sendPendingMail($id);
@@ -982,12 +1030,12 @@ final class ZipBundleService
 
             $in = $entry['size'] === 0 ? null : @fopen((string) $this->blob->path((int) $entry['document'], BlobStorage::ORIGINAL, (string) $entry['ext']), 'rb');
             if ($in === false) {
-                return $this->fail($id, $m, $token, 'Eine Datei konnte nicht gelesen werden.');
+                return $this->fail($id, $m, $token, 'dms.zip.fail.unreadable');
             }
 
             try {
                 if ($in !== null && fseek($in, $offset) !== 0) {
-                    return $this->fail($id, $m, $token, 'Eine Datei konnte nicht gelesen werden.');
+                    return $this->fail($id, $m, $token, 'dms.zip.fail.unreadable');
                 }
                 while ($offset < (int) $entry['size']) {
                     if (!$hasTime()) {
@@ -996,7 +1044,7 @@ final class ZipBundleService
                     }
                     $want = min($this->stepBytes, (int) $entry['size'] - $offset);
                     if (hash_update_stream($ctx, $in, $want) !== $want) {
-                        return $this->fail($id, $m, $token, 'Eine Datei konnte nicht gelesen werden.');
+                        return $this->fail($id, $m, $token, 'dms.zip.fail.unreadable');
                     }
                     $offset += $want;
                     if (!$this->checkpoint($id, $m, $file, $offset, $ctx, $token)) {
@@ -1093,11 +1141,11 @@ final class ZipBundleService
     {
         $doc = ($this->document)((int) $entry['document']);
         if ($doc === null) {
-            return 'Ein Dokument wurde inzwischen gelöscht. Das ZIP muss neu erstellt werden.';
+            return 'dms.zip.fail.deleted';
         }
         if (!hash_equals((string) $entry['checksum'], $doc->getChecksum())
             || $this->blob->size((int) $entry['document'], BlobStorage::ORIGINAL, (string) $entry['ext']) !== (int) $entry['size']) {
-            return 'Ein Dokument wurde inzwischen geändert. Das ZIP muss neu erstellt werden.';
+            return 'dms.zip.fail.changed';
         }
 
         return null;
@@ -1133,16 +1181,16 @@ final class ZipBundleService
     {
         $id = (int) $entry['document'];
         if (!$this->mayRead($id)) {
-            throw new ZipBundleException('Kein Zugriff mehr auf ein Dokument in diesem ZIP.', 403);
+            throw new ZipBundleException(t('dms.zip.noAccess'), 403);
         }
 
         $doc = ($this->document)($id);
         if ($doc === null) {
-            throw new ZipBundleException('Ein Dokument in diesem ZIP wurde gelöscht. Das ZIP muss neu erstellt werden.', 409);
+            throw new ZipBundleException(t('dms.zip.deleted'), 409);
         }
         if (!hash_equals((string) $entry['checksum'], $doc->getChecksum())
             || $this->blob->size($id, BlobStorage::ORIGINAL, (string) $entry['ext']) !== (int) $entry['size']) {
-            throw new ZipBundleException('«' . $entry['name'] . '» wurde geändert. Das ZIP muss neu erstellt werden.', 409);
+            throw new ZipBundleException(t('dms.zip.changed', ['name' => $entry['name']]), 409);
         }
     }
 
@@ -1273,7 +1321,7 @@ final class ZipBundleService
         $this->update($id, static function (?array $m) use (&$claimed, $now): ?array {
             $state = (string) ($m['mail']['state'] ?? self::MAIL_NONE);
             if ($state === self::MAIL_SENDING) {
-                $m['mail'] = ['state' => self::MAIL_FAILED, 'at' => $now, 'error' => 'Der Versand wurde unterbrochen.'];
+                $m['mail'] = ['state' => self::MAIL_FAILED, 'at' => $now, 'error' => 'dms.zip.mail.interrupted'];
                 return $m;
             }
             if ($state !== self::MAIL_PENDING) {
@@ -1296,6 +1344,7 @@ final class ZipBundleService
                 'expires'   => (int) $claimed['expires'],
                 'reason'    => (string) ($claimed['error'] ?? ''),
                 'profile'   => (string) ($claimed['mailProfile'] ?? ''),
+                'language'  => (string) ($claimed['mail']['language'] ?? ''),
             ]);
         } catch (\Throwable $e) {
             $sent  = false;
@@ -1312,7 +1361,7 @@ final class ZipBundleService
             }
             $m['mail'] = $sent
                 ? ['state' => self::MAIL_SENT, 'at' => $at]
-                : ['state' => self::MAIL_FAILED, 'at' => $at, 'error' => 'Die E-Mail konnte nicht gesendet werden.'];
+                : ['state' => self::MAIL_FAILED, 'at' => $at, 'error' => 'dms.zip.mail.failed'];
             return $m;
         });
     }
@@ -1375,7 +1424,7 @@ final class ZipBundleService
         $owner = ($this->owner)();
         $m     = $this->read($id);
         if ($m === null || $owner === '' || !hash_equals((string) $m['owner'], hash('sha256', $owner)) || (int) $m['expires'] < $this->now()) {
-            throw new ZipBundleException('ZIP nicht gefunden.', 404);
+            throw new ZipBundleException(t('dms.zip.notFound'), 404);
         }
 
         return $m;
@@ -1690,8 +1739,8 @@ final class ZipBundleService
             'expires'   => (int) $m['expires'],
             'skipped'   => $skipped,
             'denied'    => $denied,
-            'mail'      => array_diff_key((array) ($m['mail'] ?? ['state' => self::MAIL_NONE]), ['to' => true]),
-            'error'     => $m['error'] ?? null,
+            'mail'      => self::mailView((array) ($m['mail'] ?? ['state' => self::MAIL_NONE])),
+            'error'     => isset($m['error']) ? self::stored($m['error'], 'dms.zip.failed') : null,
         ];
     }
 

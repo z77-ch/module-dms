@@ -5,6 +5,9 @@
  * «Sie»: a host with its own tone replaces it through `dmsConfig['zipMail']`. Rendered inside
  * the shared emails/layout; plain text derived per HtmlToText.
  *
+ * Texts: `dms.mail.*` in the module dictionary (res/i18n), rendered in the language the bundle
+ * was asked for in (ADR-056).
+ *
  * @var int    $documents
  * @var string $size      formatted
  * @var string $expires   date, d.m.Y
@@ -12,17 +15,21 @@
  */
 ?>
 <p data-z77-inline="logo" style="margin:0 0 24px;"></p>
-<p>Guten Tag</p>
+<p><?= e(t('dms.mail.greeting')) ?></p>
 
 <p>
-    Der ZIP-Download mit <?= e((string) $documents) ?> <?= $documents === 1 ? 'Dokument' : 'Dokumenten' ?>
-    (<?= e($size) ?>) ist bereit. Er steht bis zum <?= e($expires) ?> zur Verfügung und wird danach entfernt.
+    <?= e(t('dms.mail.zipReady.lead', [
+        'documents'    => (string) $documents,
+        'documentWord' => t($documents === 1 ? 'dms.mail.document.one' : 'dms.mail.document.many'),
+        'size'         => $size,
+        'expires'      => $expires,
+    ])) ?>
 </p>
 
 <p>
-    <a href="<?= e($link) ?>">Zum ZIP-Download</a>
+    <a href="<?= e($link) ?>"><?= e(t('dms.mail.zipReady.link')) ?></a>
 </p>
 
 <p>
-    Für den Download ist eine Anmeldung nötig.
+    <?= e(t('dms.mail.zipReady.login')) ?>
 </p>

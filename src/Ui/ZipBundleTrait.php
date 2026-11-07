@@ -34,7 +34,7 @@ use Z77\Core\DI,
  *   GET|HEAD zip-download  id  the archive, explicit `Range` pieces through
  *                              `documents/chunk-download.js`; each piece passes the gate
  *
- *   Any refusal: {ok:false, status:"error", error:"<German message>", data:{message}} with
+ *   Any refusal: {ok:false, status:"error", error:"<message in the reader's language>", data:{message}} with
  *   400 / 403 / 404 / 409 / 422 / 429 / 500 — never a stack trace. POSTs are `#[Fetch]`: they
  *   pass the global CSRF gate (DMS-SEC-001 rule).
  *
@@ -142,7 +142,7 @@ trait ZipBundleTrait
             return $this->zipRefusal($e);
         } catch (\Throwable $e) {
             error_log('[dms] zip download: ' . $e);
-            return $this->json(['ok' => false, 'status' => 'error', 'error' => 'Das ZIP konnte nicht geliefert werden.'], 500);
+            return $this->json(['ok' => false, 'status' => 'error', 'error' => t('dms.zip.notDelivered')], 500);
         }
     }
 
@@ -164,7 +164,7 @@ trait ZipBundleTrait
             return $this->zipRefusal($e);
         } catch (\Throwable $e) {
             error_log('[dms] zip bundle: ' . $e);
-            return $this->json(['ok' => false, 'status' => 'error', 'error' => 'Das ZIP konnte nicht erstellt werden.'], 500);
+            return $this->json(['ok' => false, 'status' => 'error', 'error' => t('dms.zip.fail.generic')], 500);
         }
     }
 

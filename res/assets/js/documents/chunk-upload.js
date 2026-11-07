@@ -48,6 +48,16 @@ window.Z77ChunkUpload = (function () {
 
     var _pending = typeof WeakMap === 'function' ? new WeakMap() : null;
 
+    /**
+     * A string in the page's language (ADR-056): the `_Z77.core.i18n` dictionary where the page
+     * carries one, the German literal otherwise; `{$name}` placeholders filled from `params`.
+     */
+    function tr(key, fallback, params) {
+        var s = typeof _Z77 !== 'undefined' && _Z77.core && _Z77.core.i18n ? _Z77.core.i18n.t(key, fallback) : fallback;
+        if (params) Object.keys(params).forEach(function (p) { s = s.split('{$' + p + '}').join(String(params[p])); });
+        return s;
+    }
+
     function csrf() {
         var meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.getAttribute('content') || '' : '';
@@ -56,7 +66,7 @@ window.Z77ChunkUpload = (function () {
     /** SHA-256 of a Blob as lower-case hex (WebCrypto; one chunk is small enough to hash whole). */
     function sha256(blob) {
         if (!window.crypto || !window.crypto.subtle) {
-            var err = new Error('Sichere Verbindung (HTTPS) für den Upload grosser Dateien nötig.');
+            var err = new Error(tr('dms.js.upload.https', 'Sichere Verbindung (HTTPS) für den Upload grosser Dateien nötig.'));
             err.final = true;
             return Promise.reject(err);
         }
@@ -90,7 +100,7 @@ window.Z77ChunkUpload = (function () {
     }
 
     function failure(r) {
-        var err = new Error(reason(r.json) || (r.status === 0 ? 'Verbindung unterbrochen' : 'Server-Fehler (' + r.status + ')'));
+        var err = new Error(reason(r.json) || (r.status === 0 ? tr('dms.js.connectionLost', 'Verbindung unterbrochen') : tr('dms.js.serverError', 'Server-Fehler ({$status})', { status: r.status })));
         err.status = r.status;
         err.final = !transient(r);
         err.gone = r.status === 404;
@@ -161,7 +171,7 @@ window.Z77ChunkUpload = (function () {
         var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : function () {};
         var kept       = _pending ? _pending.get(file) : null;
 
-        if (!base) return Promise.reject(new Error('Upload-Ziel fehlt.'));
+        if (!base) return Promise.reject(new Error(tr('dms.js.upload.noTarget', 'Upload-Ziel fehlt.')));
 
         // The user confirmed «überschreiben» after a conflict: the server still holds the
         // bytes of that upload — finish it again instead of sending everything once more.
@@ -279,7 +289,7 @@ window.Z77ChunkUpload = (function () {
                 }
                 var err = failure(r);
                 if (r.status === 0) {
-                    err.message = 'Verbindung beim Abschliessen unterbrochen — bitte prüfen, ob die Datei angekommen ist.';
+                    err.message = tr('dms.js.upload.finishLost', 'Verbindung beim Abschliessen unterbrochen — bitte prüfen, ob die Datei angekommen ist.');
                     err.gone = true;          // do not abort: the server may have stored it
                 }
                 throw err;

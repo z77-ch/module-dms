@@ -112,12 +112,18 @@ final class ActivityLog
         }
     }
 
-    /** The session's `realm:id`; '' for a guest, a job's identity and a process without a session. */
+    /**
+     * The session's `realm:id`; '' for a guest, a job's identity and a process without a session.
+     * A stateless route registers no AuthService, which is no failure: its actor is simply ''.
+     */
     private static function actorKey(): string
     {
         try {
             if (self::$actor !== null) {
                 return (string) (self::$actor)();
+            }
+            if (!DI::getInstance()->has('AuthService')) {
+                return '';
             }
             $user = DI::getAuthService()->getCurrentUser();
 

@@ -61,6 +61,16 @@
 
     function noop() {}
 
+    /**
+     * A string in the page's language (ADR-056): the `_Z77.core.i18n` dictionary where the page
+     * carries one, the German literal otherwise; `{$name}` placeholders filled from `params`.
+     */
+    function tr(key, fallback, params) {
+        var s = typeof _Z77 !== 'undefined' && _Z77.core && _Z77.core.i18n ? _Z77.core.i18n.t(key, fallback) : fallback;
+        if (params) Object.keys(params).forEach(function (p) { s = s.split('{$' + p + '}').join(String(params[p])); });
+        return s;
+    }
+
     function error(message, final) {
         var err = new Error(message);
         err.final = !!final;
@@ -142,13 +152,13 @@
     /** Why a piece was refused, for the user; transient answers are retried. */
     function statusError(r) {
         if (r.redirected || r.status === 401 || r.status === 403) {
-            return error('Kein Zugriff oder Sitzung abgelaufen — bitte neu anmelden.', true);
+            return error(tr('dms.js.download.noAccess', 'Kein Zugriff oder Sitzung abgelaufen — bitte neu anmelden.'), true);
         }
-        if (r.status === 429 || r.status >= 500) return error('Server-Fehler (' + r.status + ')', false);
-        if (r.status === 200) return error('Der Server liefert diese Datei nicht in Teilstücken.', true);
-        if (r.status === 404) return error('Datei nicht gefunden.', true);
-        if (r.status === 413) return error('Teilstück zu gross für den Server.', true);
-        return error('Server-Fehler (' + r.status + ')', true);
+        if (r.status === 429 || r.status >= 500) return error(tr('dms.js.serverError', 'Server-Fehler ({$status})', { status: r.status }), false);
+        if (r.status === 200) return error(tr('dms.js.download.noRanges', 'Der Server liefert diese Datei nicht in Teilstücken.'), true);
+        if (r.status === 404) return error(tr('dms.js.download.notFound', 'Datei nicht gefunden.'), true);
+        if (r.status === 413) return error(tr('dms.js.download.chunkTooLarge', 'Teilstück zu gross für den Server.'), true);
+        return error(tr('dms.js.serverError', 'Server-Fehler ({$status})', { status: r.status }), true);
     }
 
     /**
@@ -191,17 +201,17 @@
             }
             if (r.status !== 206) return refusal(r);
             if (!range || range.start !== start || range.end < start || range.end > end || range.end >= range.total) {
-                throw error('Der Server hat ein falsches Teilstück geliefert.', true);
+                throw error(tr('dms.js.download.wrongChunk', 'Der Server hat ein falsches Teilstück geliefert.'), true);
             }
             var etag = r.headers.get('ETag');
-            if (!opening && (range.total !== st.size || etag !== st.etag)) throw error(CHANGED, true);
+            if (!opening && (range.total !== st.size || etag !== st.etag)) throw error(tr('dms.js.download.changed', CHANGED), true);
 
             return r.arrayBuffer().then(function (buf) {
-                if (buf.byteLength !== range.end - range.start + 1) throw error('Teilstück unvollständig empfangen.', false);
+                if (buf.byteLength !== range.end - range.start + 1) throw error(tr('dms.js.download.chunkIncomplete', 'Teilstück unvollständig empfangen.'), false);
                 return { start: range.start, end: range.end, total: range.total, etag: etag, bytes: new Uint8Array(buf), headers: r.headers };
             }, function () {
                 if (signal && signal.aborted) throw abortError();
-                throw error('Verbindung unterbrochen.', false);
+                throw error(tr('dms.js.download.connectionLost', 'Verbindung unterbrochen.'), false);
             });
         }
 
@@ -212,7 +222,7 @@
                 return received(r, start, end);
             }, function () {
                 if (signal && signal.aborted) throw abortError();
-                throw error('Verbindung unterbrochen.', false);
+                throw error(tr('dms.js.download.connectionLost', 'Verbindung unterbrochen.'), false);
             });
         }
 
@@ -459,9 +469,9 @@
                         job.onProgress(m.total, m.total);
                         finish(true, { size: m.total, filename: m.filename, via: 'worker' });
                     } else if (m.type === 'cancelled') {
-                        finish(false, abortError('Download abgebrochen.'));
+                        finish(false, abortError(tr('dms.js.download.aborted', 'Download abgebrochen.')));
                     } else if (m.type === 'error') {
-                        finish(false, error(m.message || 'Download fehlgeschlagen.', true));
+                        finish(false, error(m.message || tr('dms.js.download.failed', 'Download fehlgeschlagen.'), true));
                     }
                 };
                 if (job.signal) job.signal.addEventListener('abort', onAbort);
@@ -499,7 +509,7 @@
         return root.showSaveFilePicker({ suggestedName: job.filename || 'download' }).then(function (handle) {
             return handle.createWritable();
         }, function (err) {
-            throw err && err.name === 'AbortError' ? abortError('Download abgebrochen.') : err;
+            throw err && err.name === 'AbortError' ? abortError(tr('dms.js.download.aborted', 'Download abgebrochen.')) : err;
         }).then(function (writable) {
             var rd = newReader(job);
             return rd.open().then(function (meta) {
@@ -539,7 +549,7 @@
     function download(url, opts) {
         opts = opts || {};
         var target = IS_PAGE ? sameOrigin(url, root.location.href) : '';
-        if (!target) return Promise.reject(error('Nur Dateien dieser Website können so geladen werden.', true));
+        if (!target) return Promise.reject(error(tr('dms.js.download.foreign', 'Nur Dateien dieser Website können so geladen werden.'), true));
         if (opts.signal && opts.signal.aborted) return Promise.reject(abortError());
 
         var job = {

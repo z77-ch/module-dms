@@ -62,10 +62,10 @@ trait ChunkedUploadTrait
             $folderId = (int) $request->getPostParameter('folder_id');
             $size     = (string) $request->getPostParameter('size');
             if ($folderId <= 0) {
-                throw new ChunkUploadException('Bitte einen Ziel-Ordner wählen.', 400);
+                throw new ChunkUploadException(t('dms.upload.chooseFolder'), 400);
             }
             if (!ctype_digit($size) || strlen($size) > 18) {
-                throw new ChunkUploadException('Ungültige Dateigrösse.', 400);
+                throw new ChunkUploadException(t('dms.upload.invalidSize'), 400);
             }
 
             $service  = ChunkedUploadService::create();
@@ -89,10 +89,10 @@ trait ChunkedUploadTrait
             $index   = (string) $request->getPostParameter('index');
             $chunk   = $request->getUploadedFile('chunk');
             if (!ctype_digit($index) || strlen($index) > 9) {
-                throw new ChunkUploadException('Ungültige Teilstück-Nummer.', 400);
+                throw new ChunkUploadException(t('dms.upload.invalidIndex'), 400);
             }
             if ($chunk === null || !$chunk->isOk()) {
-                throw new ChunkUploadException('Teilstück nicht empfangen.', 400);
+                throw new ChunkUploadException(t('dms.upload.chunkMissing'), 400);
             }
 
             $received = ChunkedUploadService::create()->append(
@@ -176,7 +176,7 @@ trait ChunkedUploadTrait
             return $this->chunkRefusal($e->getMessage(), is_int($code) && $code >= 400 && $code < 600 ? $code : 400, $e->retry);
         } catch (NotFoundException) {
             // Authz never says whether a folder exists (DMS model) — neither does this.
-            return $this->chunkRefusal('Ziel-Ordner nicht gefunden oder keine Berechtigung.', 404);
+            return $this->chunkRefusal(t('dms.upload.folderNotFound'), 404);
         } catch (DuplicateUploadException $e) {
             return $this->json(['ok' => false, 'status' => 'duplicate', 'error' => $e->getMessage(),
                                 'data' => ['message' => $e->getMessage()]]);
@@ -184,7 +184,7 @@ trait ChunkedUploadTrait
             return $this->json(['ok' => false, 'status' => 'conflict', 'error' => $e->getMessage(),
                                 'data' => ['message' => $e->getMessage()]], 409);
         } catch (\RuntimeException $e) {
-            // The domain's own refusals for the user are German (sealed, retention); the
+            // The domain's own refusals for the user are in the reader's language (sealed, retention); the
             // technical ones carry their class as a prefix («UploadService: …») — those are
             // logged and answered in words a user can act on.
             $message = $e->getMessage();
@@ -193,13 +193,13 @@ trait ChunkedUploadTrait
             }
             error_log('[dms] chunked upload: ' . $message);
             return $this->chunkRefusal(match (true) {
-                str_contains($message, 'is not allowed') => 'Dateityp nicht erlaubt.',
-                str_contains($message, 'memory')         => 'Bild zu gross für den Arbeitsspeicher des Servers.',
-                default                                  => 'Die Datei konnte nicht gespeichert werden.',
+                str_contains($message, 'is not allowed') => t('dms.upload.typeNotAllowed'),
+                str_contains($message, 'memory')         => t('dms.upload.imageTooLarge'),
+                default                                  => t('dms.upload.notSaved'),
             }, str_contains($message, 'is not allowed') ? 415 : 500);
         } catch (\Throwable $e) {
             error_log('[dms] chunked upload: ' . $e);
-            return $this->chunkRefusal('Die Datei konnte nicht gespeichert werden.', 500);
+            return $this->chunkRefusal(t('dms.upload.notSaved'), 500);
         }
     }
 

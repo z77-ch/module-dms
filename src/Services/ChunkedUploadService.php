@@ -157,26 +157,26 @@ final class ChunkedUploadService
 
         $owner = ($this->owner)();
         if ($owner === '') {
-            throw new ChunkUploadException('Bitte zuerst anmelden.', 403);
+            throw new ChunkUploadException(t('dms.loginFirst'), 403);
         }
 
         $name = self::cleanName($name);
         if ($name === '') {
-            throw new ChunkUploadException('Ungültiger Dateiname.', 400);
+            throw new ChunkUploadException(t('dms.upload.invalidName'), 400);
         }
         if ($size <= 0) {
-            throw new ChunkUploadException('Leere Datei.', 400);
+            throw new ChunkUploadException(t('dms.upload.empty'), 400);
         }
         if ($this->maxBytes !== null && $size > $this->maxBytes) {
-            throw new ChunkUploadException('Datei zu gross (max. ' . UploadPolicy::formatBytes($this->maxBytes) . ').', 413);
+            throw new ChunkUploadException(t('dms.upload.tooLarge', ['max' => UploadPolicy::formatBytes($this->maxBytes)]), 413);
         }
         // Certain from the name alone (DMS-MEDIA-PHP-001): never accepted, whatever the bytes.
         // Everything else is decided on the sniffed bytes at finish.
         if (UploadTypes::isExecutable(strtolower(pathinfo($name, PATHINFO_EXTENSION)))) {
-            throw new ChunkUploadException('Dateityp nicht erlaubt.', 415);
+            throw new ChunkUploadException(t('dms.upload.typeNotAllowed'), 415);
         }
         if (!UploadTypes::isStorable(strtolower(pathinfo($name, PATHINFO_EXTENSION)))) {
-            throw new ChunkUploadException('Dateien ohne gültige Endung können nicht hochgeladen werden.', 415);
+            throw new ChunkUploadException(t('dms.upload.noExtension'), 415);
         }
 
         $this->ensureBaseDir();
@@ -186,7 +186,7 @@ final class ChunkedUploadService
 
         $free = @disk_free_space($this->baseDir);
         if (is_float($free) && $free < $size + self::DISK_RESERVE) {
-            throw new ChunkUploadException('Nicht genug Speicherplatz auf dem Server für diese Datei.', 507);
+            throw new ChunkUploadException(t('dms.upload.noSpace'), 507);
         }
 
         $uploadId = bin2hex(random_bytes(16));
@@ -234,7 +234,7 @@ final class ChunkedUploadService
     {
         $sha256 = strtolower(trim($sha256));
         if (preg_match('/^[0-9a-f]{64}$/', $sha256) !== 1) {
-            throw new ChunkUploadException('Prüfsumme des Teilstücks fehlt oder ist ungültig.', 400);
+            throw new ChunkUploadException(t('dms.upload.checksumMissing'), 400);
         }
 
         return $this->withManifest($uploadId, function (array $m, \Closure $save, string $dir) use ($index, $chunk, $sha256): int {
@@ -242,21 +242,21 @@ final class ChunkedUploadService
 
             $chunks = (int) $m['chunks'];
             if ($index < 0 || $index >= $chunks) {
-                throw new ChunkUploadException('Ungültige Teilstück-Nummer.', 400);
+                throw new ChunkUploadException(t('dms.upload.invalidIndex'), 400);
             }
             if (!$chunk->isOk()) {
-                throw new ChunkUploadException('Teilstück nicht empfangen.', 400);
+                throw new ChunkUploadException(t('dms.upload.chunkMissing'), 400);
             }
 
             $chunkBytes = (int) $m['chunkBytes'];
             $expected   = $index < $chunks - 1 ? $chunkBytes : (int) $m['size'] - ($chunks - 1) * $chunkBytes;
             clearstatcache(true, $chunk->tmpPath);
             if (filesize($chunk->tmpPath) !== $expected) {
-                throw new ChunkUploadException('Teilstück hat die falsche Grösse.', 400);
+                throw new ChunkUploadException(t('dms.upload.chunkSize'), 400);
             }
             $got = hash_file('sha256', $chunk->tmpPath);
             if ($got === false || !hash_equals($sha256, $got)) {
-                throw new ChunkUploadException('Teilstück beschädigt angekommen — es wird erneut gesendet.', 422, retry: true);
+                throw new ChunkUploadException(t('dms.upload.chunkDamaged'), 422, retry: true);
             }
 
             $in  = @fopen($chunk->tmpPath, 'rb');
@@ -321,12 +321,12 @@ final class ChunkedUploadService
 
                 $missing = (int) $m['chunks'] - count((array) $m['received']);
                 if ($missing > 0) {
-                    throw new ChunkUploadException("Upload unvollständig: {$missing} Teilstück(e) fehlen.", 409);
+                    throw new ChunkUploadException(t('dms.upload.incomplete', ['missing' => $missing]), 409);
                 }
                 $data = $dir . '/' . self::DATA;
                 clearstatcache(true, $data);
                 if (!is_file($data) || filesize($data) !== (int) $m['size']) {
-                    throw new ChunkUploadException('Die empfangene Datei hat nicht die angekündigte Grösse.', 409);
+                    throw new ChunkUploadException(t('dms.upload.sizeMismatch'), 409);
                 }
 
                 $file = new UploadedFile((string) $m['name'], $data, (int) $m['size']);
@@ -488,6 +488,6 @@ final class ChunkedUploadService
 
     private static function notFound(): ChunkUploadException
     {
-        return new ChunkUploadException('Upload nicht gefunden — bitte die Datei neu hochladen.', 404);
+        return new ChunkUploadException(t('dms.upload.notFound'), 404);
     }
 }

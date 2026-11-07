@@ -245,12 +245,12 @@ final class UploadService
         if ($existing !== null) {
             if ($existing->getChecksum() === $checksum) {
                 throw new DuplicateUploadException(
-                    "«{$file->originalName}» ist in diesem Ordner bereits vorhanden (identischer Inhalt)."
+                    t('dms.upload.duplicate', ['name' => $file->originalName])
                 );
             }
             if (!$overwrite) {
                 throw new NameConflictException(
-                    "«{$file->originalName}» existiert in diesem Ordner bereits mit anderem Inhalt."
+                    t('dms.upload.conflict', ['name' => $file->originalName])
                 );
             }
 
@@ -271,7 +271,7 @@ final class UploadService
     private function classify(UploadedFile $file): array
     {
         if (!UploadTypes::isStorable($file->extension())) {
-            throw new \RuntimeException('Dateien ohne gültige Endung können nicht hochgeladen werden.');
+            throw new \RuntimeException(t('dms.upload.noExtension'));
         }
         $sniffed = $file->sniffMime();
         $kind    = $this->types->kindFor($sniffed, $file->extension());
@@ -295,11 +295,11 @@ final class UploadService
 
         $docs = DocumentService::create();
         if ($docs->effectiveDeliveryMode($existing) === 'sealed') {
-            throw new \RuntimeException('Ein versiegeltes Dokument kann nicht überschrieben werden.');
+            throw new \RuntimeException(t('dms.upload.sealed'));
         }
         $until = $existing->getRetentionUntil();
         if ($until !== null && strtotime($until) > time()) {
-            throw new \RuntimeException("Aufbewahrungsfrist läuft noch (bis {$until}) — Überschreiben gesperrt.");
+            throw new \RuntimeException(t('dms.upload.retention', ['until' => $until]));
         }
 
         // In-place replace keeps id/slug/URL: the static copy would keep serving the OLD
