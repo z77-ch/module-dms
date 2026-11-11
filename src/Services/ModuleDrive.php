@@ -29,12 +29,60 @@ final class ModuleDrive
         private FolderRepository $folders,
         private UnifiedEntityManager $em,
         private Folder $root,
+        private bool $created = false,
     ) {}
 
     /** The module's target partition (the subtree top — every write stays below it). */
     public function root(): Folder
     {
         return $this->root;
+    }
+
+    /**
+     * Whether the partition was created by the {@see DocumentService::forModule()} call that
+     * built this handle. A module sets up what is NEW (e.g. {@see ensurePublic()} for its fresh
+     * partition) and leaves an existing one as people have set it since.
+     */
+    public function created(): bool
+    {
+        return $this->created;
+    }
+
+    /**
+     * Make the module's partition deliver PUBLICLY (`deliveryMode = public` on the partition
+     * root, inherited by its subtree) — for a module whose documents are web content (z77.ch
+     * «Projekte»: its images are shown on the public site). Idempotent: a partition that is
+     * already `public` is left alone, nothing is written. An explicit act of the MODULE, never a
+     * side effect: the media picker refuses a non-public document and never switches a folder
+     * (bauplan `media-picker-bauplan.md` decision 4) — switching would publish every other
+     * document below it.
+     *
+     * A partition someone `sealed` stays sealed: opening a vault is a person's decision in the
+     * Drive, not a module's (ADR-017, the sealed cap). Trusted system path like the rest of this
+     * handle — no session principal, the boundary is the module's own partition. The `/media`
+     * copies of the subtree are invalidated after the flush (a gate change, DMS-MAT-001).
+     *
+     * @throws \RuntimeException when the partition is sealed
+     */
+    public function ensurePublic(): Folder
+    {
+        $root = $this->folders->find((int) $this->root->getId()) ?? $this->root;
+        if ($root->getDeliveryMode() === 'public') {
+            return $this->root = $root;
+        }
+        if ($root->getDeliveryMode() === 'sealed') {
+            throw new \RuntimeException(
+                "ModuleDrive: partition '{$root->getKey()}' is sealed — a module never opens a sealed partition; "
+                . 'that is a decision in the Drive (ADR-017).'
+            );
+        }
+
+        $root->setDeliveryMode('public');
+        $this->em->persist($root);
+        $this->em->flush();
+        $this->documents->invalidateMaterializedFolder((int) $root->getId()); // AFTER the flush: a gate change
+
+        return $this->root = $root;
     }
 
     /**

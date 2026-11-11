@@ -1,0 +1,207 @@
+// ── media field + media picker (host-neutral geometry) ──────────────────────────
+//
+// The backend's media field (`partials/mediaField`) and the picker window behind it
+// (`Documents/DriveController/_pick` + `_pickGrid`, bauplan `media-picker-bauplan.md` P1).
+// NOT part of `dms.css`: the field stands in ANY backend form and the picker opens over any
+// backend page, where the Drive's bundle is not loaded. The host compiles this partial INTO its
+// own bundle (backend: `base.scss`) and binds the colours (`_dms-host.scss`) — the split of
+// `_windows.scss` / `_upload.scss`. The defaults below let it render on its own.
+
+.dms-media-field,
+.dms-pick {
+    --dms-media-line:        #d9dbe4;
+    --dms-media-ground:      #f4f5f8;
+    --dms-media-card:        #fff;
+    --dms-media-muted:       #6b7280;
+    --dms-media-accent:      #0aa5b5;
+    --dms-media-accent-soft: #e0f4f6;
+    --dms-media-warn:        #b45309;
+    --dms-media-radius:      8px;
+}
+
+// ── the field ──
+.dms-media-field__body {
+    display:     flex;
+    flex-wrap:   wrap;
+    align-items: center;
+    gap:         .75rem;
+    min-width:   0;
+}
+.dms-media-field__thumb {
+    display:     inline-flex;
+    align-items: center;
+    gap:         .6rem;
+    min-width:   0;
+    max-width:   100%;
+}
+.dms-media-field__frame {
+    display:       grid;
+    flex:          none;
+    place-items:   center;
+    width:         4.5rem;
+    height:        4.5rem;
+    overflow:      hidden;
+    border:        1px solid var(--dms-media-line);
+    border-radius: var(--dms-media-radius);
+    background:    var(--dms-media-ground);
+}
+.dms-media-field__frame img {
+    display:    block;
+    width:      100%;
+    height:     100%;
+    object-fit: cover;
+}
+.dms-media-field__thumb:is(.is-empty, .is-missing) .dms-media-field__frame { border-style: dashed; }
+.dms-media-field__name {
+    min-width:     0;
+    overflow:      hidden;
+    text-overflow: ellipsis;
+    white-space:   nowrap;
+    font-size:     .85rem;
+}
+.dms-media-field__thumb:is(.is-empty, .is-missing) .dms-media-field__name { color: var(--dms-media-muted); }
+.dms-media-field__thumb.is-missing .dms-media-field__name                  { color: var(--dms-media-warn); }
+.dms-media-field__actions {
+    display: flex;
+    gap:     .4rem;
+}
+// «Entfernen» only while there is something to remove — read from the thumbnail's own state,
+// so the choice answer and the script need not touch the button.
+.dms-media-field:has([data-media-field-thumb][data-empty]) [data-media-field-clear] { display: none; }
+
+// ── the picker window ──
+.dms-pick__body {
+    display:               grid;
+    grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr);
+    gap:                   1rem;
+    min-height:            20rem;
+}
+.dms-pick__tree {
+    max-height:    65vh;
+    padding:       .5rem;
+    overflow:      auto;
+    border:        1px solid var(--dms-media-line);
+    border-radius: var(--dms-media-radius);
+    background:    var(--dms-media-card);
+}
+.dms-pick__tree ul {
+    margin:     0;
+    padding:    0;
+    list-style: none;
+}
+.dms-pick__tree ul ul { padding-left: .9rem; }
+.dms-pick__tree summary { cursor: pointer; }
+.dms-pick__folder {
+    display:         inline-block;
+    max-width:       100%;
+    padding:         .2rem .45rem;
+    overflow:        hidden;
+    border-radius:   calc(var(--dms-media-radius) - 2px);
+    color:           inherit;
+    font-size:       .85rem;
+    text-decoration: none;
+    text-overflow:   ellipsis;
+    white-space:     nowrap;
+    vertical-align:  middle;
+}
+// A leaf has no disclosure marker: it stands where a summary's text stands.
+.dms-pick__folder--leaf { margin-left: 1.1rem; }
+.dms-pick__folder:hover,
+.dms-pick__folder:focus-visible { background: var(--dms-media-ground); }
+.dms-pick__folder.is-current {
+    background:  var(--dms-media-accent-soft);
+    color:       var(--dms-media-accent);
+    font-weight: 600;
+}
+.dms-pick__folder.is-inactive { opacity: .6; }
+
+.dms-pick__main {
+    display:        flex;
+    flex-direction: column;
+    gap:            .75rem;
+    min-width:      0;
+}
+.dms-pick__head {
+    display:     flex;
+    align-items: center;
+    gap:         .5rem;
+    min-width:   0;
+}
+.dms-pick__title {
+    min-width:     0;
+    overflow:      hidden;
+    text-overflow: ellipsis;
+    white-space:   nowrap;
+}
+.dms-pick__note { margin: 0; }
+
+.dms-pick__grid {
+    display:               grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap:                   .6rem;
+}
+.dms-pick__item {
+    display:        flex;
+    flex-direction: column;
+    gap:            .25rem;
+    min-width:      0;
+    padding:        .4rem;
+    border:         1px solid var(--dms-media-line);
+    border-radius:  var(--dms-media-radius);
+    background:     var(--dms-media-card);
+    color:          inherit;
+    font:           inherit;
+    text-align:     left;
+    cursor:         pointer;
+}
+.dms-pick__item:hover,
+.dms-pick__item:focus-visible {
+    border-color: var(--dms-media-accent);
+    outline:      none;
+    box-shadow:   0 0 0 2px var(--dms-media-accent-soft);
+}
+.dms-pick__item.is-fresh { box-shadow: 0 0 0 2px var(--dms-media-accent); }
+.dms-pick__item.is-disabled,
+.dms-pick__item:disabled {
+    cursor:  not-allowed;
+    opacity: .55;
+}
+.dms-pick__item:disabled:hover {
+    border-color: var(--dms-media-line);
+    box-shadow:   none;
+}
+.dms-pick__thumb {
+    display:       grid;
+    place-items:   center;
+    aspect-ratio:  1;
+    overflow:      hidden;
+    border-radius: calc(var(--dms-media-radius) - 3px);
+    background:    var(--dms-media-ground);
+}
+.dms-pick__thumb img {
+    display:    block;
+    width:      100%;
+    height:     100%;
+    object-fit: contain;
+}
+.dms-pick__ext {
+    color:       var(--dms-media-muted);
+    font-size:   .75rem;
+    font-weight: 600;
+}
+.dms-pick__name,
+.dms-pick__meta,
+.dms-pick__reason {
+    overflow:      hidden;
+    text-overflow: ellipsis;
+    white-space:   nowrap;
+}
+.dms-pick__name   { font-size: .8rem; }
+.dms-pick__meta   { color: var(--dms-media-muted); font-size: .7rem; }
+.dms-pick__reason { color: var(--dms-media-warn);  font-size: .7rem; white-space: normal; }
+
+// A phone: the tree above the grid, short.
+@media (max-width: 767px) {
+    .dms-pick__body { grid-template-columns: minmax(0, 1fr); }
+    .dms-pick__tree { max-height: 30vh; }
+}

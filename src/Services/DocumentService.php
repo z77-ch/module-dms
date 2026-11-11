@@ -276,18 +276,23 @@ final class DocumentService
      * (`['<module-key>' => '<partition-key>']` — the optional remapping foreseen by
      * ADR-020; the module key itself stays a CODE constant, S2). The partition is
      * ensured get-or-create ({@see rootFolder}); every write through the handle is
-     * confined to that subtree ({@see ModuleDrive}).
+     * confined to that subtree ({@see ModuleDrive}). `$name` names a partition this call
+     * CREATES (the Drive shows it; default: the key) — an existing one keeps its name.
      */
-    public function forModule(string $moduleKey): ModuleDrive
+    public function forModule(string $moduleKey, ?string $name = null): ModuleDrive
     {
         $map       = DI::getModuleManager()->getModuleConfig('dms')?->get('moduleFolders', []) ?? [];
         $targetKey = (is_array($map) ? ($map[$moduleKey] ?? null) : null) ?? $moduleKey;
+        // Whether THIS call creates the partition — a module may set up what is new
+        // (ModuleDrive::created()), never re-decide what a person has set since.
+        $existed   = $this->folders->findRootByKey($targetKey) instanceof Folder;
 
         return new ModuleDrive(
             $this,
             $this->folders,
             $this->em,
-            $this->rootFolder($targetKey),
+            $this->rootFolder($targetKey, $name),
+            !$existed,
         );
     }
 
@@ -625,7 +630,7 @@ final class DocumentService
             return null;
         }
         $hit = $this->resolve(array_slice($segments, 1));
-        if ($hit === null || $this->effectiveDeliveryMode($hit['document']) !== 'public' || !$this->isActiveChain($hit['document'])) {
+        if ($hit === null || !$this->isPubliclyDelivered($hit['document'])) {
             return null;
         }
 
@@ -731,6 +736,21 @@ final class DocumentService
     public function effectiveDeliveryMode(Document $doc): string
     {
         return $this->resolveEffective($doc->getDeliveryMode(), $doc->getFolderId());
+    }
+
+    /**
+     * Whether `/media` hands this document to anybody, without a login: not soft-deleted,
+     * effectively `public`, and the whole active chain holds (the OutputController's open
+     * branch). The one predicate behind the lazy fill ({@see materialize}), the server-side
+     * read ({@see publicFileForPath}) and a page that embeds the document (the media content
+     * blocks) — {@see publicUrl()} builds its URL blindly, so a caller that must not print a
+     * dead link asks this first.
+     */
+    public function isPubliclyDelivered(Document $doc): bool
+    {
+        return !$doc->isDeleted()
+            && $this->effectiveDeliveryMode($doc) === 'public'
+            && $this->isActiveChain($doc);
     }
 
     /**
@@ -1402,8 +1422,7 @@ final class DocumentService
             // HTML, XML, JS and text stay on the PHP path, where DeliveryPolicy answers every hit.
             || !UploadTypes::isStaticSafe($this->variantExt($doc, $variant))
             || !DeliveryPolicy::isInlineBinary($this->variantMime($doc, $variant))
-            || $this->effectiveDeliveryMode($doc) !== 'public'
-            || !$this->isActiveChain($doc)
+            || !$this->isPubliclyDelivered($doc)
         ) {
             return;
         }

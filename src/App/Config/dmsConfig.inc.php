@@ -6,6 +6,17 @@ use Z77\Core\Config\AuthRole;
 return [
     // The Drive answers a `/media/…` path with its file for server-side readers (kernel LocalFiles, 2026-10-23: the mandator logos).
     'localFileResolvers' => [\Z77\Module\Dms\Files\MediaFileResolver::class],
+
+    // Content blocks that show DMS images by document id (media-picker bauplan P2; folded in
+    // by BlockRegistry::assemble(), content.md). They live here, never in `shared`.
+    'contentBlocks' => [
+        \Z77\Module\Dms\Content\Renderer\MediaImageRenderer::class,
+        \Z77\Module\Dms\Content\Renderer\MediaGalleryRenderer::class,
+    ],
+    // The DMS behind the editor's `document` fields (P2b, ContentExtensions::documents()):
+    // the save's check of a chosen id and the picker's root — the partition of module key
+    // `content`, which a project remaps through `moduleFolders` like any module's.
+    'contentDocuments' => \Z77\Module\Dms\Content\ContentDocuments::class,
     'defaultGroup'  => 'media',
     'groupDefaults' => [
         'media' => 'output',

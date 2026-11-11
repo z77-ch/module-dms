@@ -412,11 +412,39 @@ trait DriveControllerTrait
             return $this->fetchError('Ziel-Ordner nicht gefunden.');
         }
 
-        $showOriginal = (bool) DI::getRequest()->getPostParameter('show_original');
-        $overwrite    = (bool) DI::getRequest()->getPostParameter('overwrite');
-        $createdBy    = DI::getAuthService()->getCurrentUser()?->getId();
-        $poster       = DI::getRequest()->getUploadedFile('poster'); // videos only (P4); else null
-        $name         = $file->originalName;
+        // The panes of the Drive, and the modal closed — the same success response an
+        // in-place document action gives. The component collects these commands and
+        // runs them ONCE, after the last file of the run, and only when no file
+        // failed: a run with a refusal keeps its modal and its rows (UPLOAD-001).
+        return $this->storeUpload(
+            $file,
+            $folderId,
+            (bool) DI::getRequest()->getPostParameter('show_original'),
+            fn(Document $doc): FetchResponse => $this->paneRefresh($folderId, (int) $doc->getId()),
+            DI::getRequest()->getUploadedFile('poster'), // videos only (P4); else null
+        );
+    }
+
+    /**
+     * ONE uploaded file through the USER path — {@see UploadService::save()}: the session's
+     * `write` on the folder (domain gate, R-authz-1), the allowlist on the sniffed bytes, the
+     * duplicate / name conflict / guarded overwrite, `createdBy` = the session's user — and the
+     * component's per-file envelope (`success {id, name}` · `duplicate` · `conflict` · `error
+     * {name, message}`). `$success` builds the answer of the endpoint (its commands) for the
+     * saved document. Shared by the Drive's {@see uploadAction} and the media picker's upload.
+     *
+     * @param \Closure(Document): FetchResponse $success
+     */
+    private function storeUpload(
+        \Z77\Shared\ValueObjects\UploadedFile $file,
+        int $folderId,
+        bool $showOriginal,
+        \Closure $success,
+        ?\Z77\Shared\ValueObjects\UploadedFile $poster = null,
+    ): FetchResponse {
+        $overwrite = (bool) DI::getRequest()->getPostParameter('overwrite');
+        $createdBy = DI::getAuthService()->getCurrentUser()?->getId();
+        $name      = $file->originalName;
 
         try {
             // The domain gates `write` on the target folder (UploadService, R-authz-1).
@@ -430,11 +458,7 @@ trait DriveControllerTrait
                 poster: $poster,
             );
 
-            // The panes of the Drive, and the modal closed — the same success response an
-            // in-place document action gives. The component collects these commands and
-            // runs them ONCE, after the last file of the run, and only when no file
-            // failed: a run with a refusal keeps its modal and its rows (UPLOAD-001).
-            return $this->paneRefresh($folderId, (int) $doc->getId())
+            return $success($doc)
                 ->setStatus('success')
                 ->setData(['id' => (int) $doc->getId(), 'name' => $name]);
         } catch (DuplicateUploadException) {
@@ -1407,7 +1431,6 @@ trait DriveControllerTrait
     {
         $svc     = DocumentService::create();
         $folders = $this->folderRepo()->findAll();
-        $tree    = $this->folderTree();
         $authz   = Authz::create();
         $mountRootId = $this->mountRoot(); // presentation scope (option A); null = full view
 
@@ -1455,6 +1478,56 @@ trait DriveControllerTrait
             $cur = $index[$cur]->getParentId();
         }
 
+        // The tree top: the full readable forest, or — on a rooted mount (option A) — the
+        // single mount-root subtree, so the Drive presents one partition as its top.
+        $roots = $this->folderNodes($folders, $readable, $mountRootId, $selectedFolderId, $countByFolder, $activePath);
+
+        // Documents of the selected folder → list view-model. Content only for a
+        // READABLE selection (deny-by-default; a probe of an unreadable id gets nothing).
+        $files   = [];
+        $preview = null;
+        if ($selectedFolderId !== null && ($readable[$selectedFolderId] ?? false)) {
+            foreach ($svc->listByFolder($selectedFolderId) as $doc) {
+                $files[] = $this->fileVm($doc, $svc, $selectedDoc);
+                if ($selectedDoc !== null && (int) $doc->getId() === $selectedDoc) {
+                    $preview = $this->previewVm($doc, $svc);
+                }
+            }
+        }
+
+        return [
+            'roots'            => $roots,
+            'rootCount'        => 0, // the drive root stores no documents (ADR-021)
+            'rootActive'       => $selectedFolderId !== null && $selectedFolderId === $breadcrumbRootId,
+            'rootLabel'        => ($breadcrumbRootId !== null && isset($index[$breadcrumbRootId])) ? $index[$breadcrumbRootId]->getName() : 'drive',
+            'rootFolderId'     => $breadcrumbRootId,
+            'crumbs'           => $crumbs,
+            'selectedFolderId' => $selectedFolderId,
+            'selectedDoc'      => $selectedDoc,
+            'files'            => $files,
+            'preview'          => $preview,
+            'base'             => $this->groupBase(),
+            'tplNs'            => self::DMS_NS,
+        ];
+    }
+
+    /**
+     * The folder tree as nested nodes (`id, name, count, active, onPath, inactive, children`):
+     * the whole tree from the top when `$topId` is null, else the ONE subtree of `$topId` as the
+     * single top node. A folder that is not readable and has no readable descendant is left out
+     * (RF-4); an unreadable ANCESTOR of a readable one stays as a path node with a masked count.
+     * Shared by the Drive ({@see buildViewModel}) and the media picker ({@see MediaPickerTrait}).
+     *
+     * @param list<Folder>     $folders
+     * @param array<int, bool> $readable       folder id → the principal may `read` it
+     * @param array<int, int>  $countByFolder  folder id → live documents (readable folders only)
+     * @param array<int, true> $activePath     the selected folder and its ancestors
+     * @return list<array<string, mixed>>
+     */
+    private function folderNodes(array $folders, array $readable, ?int $topId, ?int $selectedFolderId, array $countByFolder, array $activePath): array
+    {
+        $tree = $this->folderTree();
+
         // Build one folder node (recursing into children), or null when it is invisible
         // (not readable and no readable descendant — RF-4). Split out from $build so a
         // rooted mount can build its single top node (the mount root) the same way.
@@ -1486,43 +1559,17 @@ trait DriveControllerTrait
             return $nodes;
         };
 
-        // The tree top: the full readable forest, or — on a rooted mount (option A) — the
-        // single mount-root subtree, so the Drive presents one partition as its top.
-        if ($mountRootId !== null) {
-            $mountFolder = $index[$mountRootId] ?? null;
-            $node        = $mountFolder !== null ? $makeNode($mountFolder) : null;
-            $roots       = $node !== null ? [$node] : [];
-        } else {
-            $roots = $build(null);
+        if ($topId === null) {
+            return $build(null);
         }
-
-        // Documents of the selected folder → list view-model. Content only for a
-        // READABLE selection (deny-by-default; a probe of an unreadable id gets nothing).
-        $files   = [];
-        $preview = null;
-        if ($selectedFolderId !== null && ($readable[$selectedFolderId] ?? false)) {
-            foreach ($svc->listByFolder($selectedFolderId) as $doc) {
-                $files[] = $this->fileVm($doc, $svc, $selectedDoc);
-                if ($selectedDoc !== null && (int) $doc->getId() === $selectedDoc) {
-                    $preview = $this->previewVm($doc, $svc);
-                }
+        foreach ($folders as $folder) {
+            if ((int) $folder->getId() === $topId) {
+                $node = $makeNode($folder);
+                return $node !== null ? [$node] : [];
             }
         }
 
-        return [
-            'roots'            => $roots,
-            'rootCount'        => 0, // the drive root stores no documents (ADR-021)
-            'rootActive'       => $selectedFolderId !== null && $selectedFolderId === $breadcrumbRootId,
-            'rootLabel'        => ($breadcrumbRootId !== null && isset($index[$breadcrumbRootId])) ? $index[$breadcrumbRootId]->getName() : 'drive',
-            'rootFolderId'     => $breadcrumbRootId,
-            'crumbs'           => $crumbs,
-            'selectedFolderId' => $selectedFolderId,
-            'selectedDoc'      => $selectedDoc,
-            'files'            => $files,
-            'preview'          => $preview,
-            'base'             => $this->groupBase(),
-            'tplNs'            => self::DMS_NS,
-        ];
+        return [];
     }
 
     /**
