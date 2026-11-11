@@ -2,8 +2,10 @@
 
 namespace Z77\Module\Dms\Services;
 
+use Z77\Module\Dms\Entities\AccessControlEntry;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Module\Dms\Entities\Folder;
+use Z77\Module\Dms\Repositories\AccessControlEntryRepository;
 use Z77\Module\Dms\Repositories\FolderRepository;
 use Z77\Module\Dms\ValueObjects\ActivityEvent;
 use Z77\Persistence\Resolver\UnifiedEntityManager;
@@ -28,6 +30,7 @@ final class ModuleDrive
         private DocumentService $documents,
         private FolderRepository $folders,
         private UnifiedEntityManager $em,
+        private AccessControlEntryRepository $aces,
         private Folder $root,
         private bool $created = false,
     ) {}
@@ -83,6 +86,63 @@ final class ModuleDrive
         $this->documents->invalidateMaterializedFolder((int) $root->getId()); // AFTER the flush: a gate change
 
         return $this->root = $root;
+    }
+
+    /**
+     * Give a ROLE a right on the module's partition root (inherited by its subtree) — for a
+     * module whose partition is worked on by people who are not super users, e.g. the content
+     * images: editors choose and upload them in the media picker (owner decision 2026-11-11).
+     * Without a grant a fresh partition is visible to a super user only (ADR-021: the ACL
+     * bypass is `superUser` alone).
+     *
+     * Role ACEs match by exact name (`AclService`), not by the role ladder: a grant to
+     * `editor` does NOT cover `admin` — grant each role that needs the right.
+     *
+     * Idempotent and NEVER lowers: an existing ACE with an equal or higher right stays, a
+     * lower one is raised. Like {@see ensurePublic()} a module calls it for what it set up
+     * itself ({@see created()}), never to re-decide grants a person changed in the Drive.
+     * Trusted system path (no session principal) — the boundary is the module's own
+     * partition, the same as `DocumentService::grant()` without its SUPER_USER gate.
+     *
+     * @param 'read'|'write'|'manage' $rights
+     */
+    public function grantRole(string $role, string $rights): AccessControlEntry
+    {
+        $ladder = ['read' => 1, 'write' => 2, 'manage' => 3];
+        if (!isset($ladder[$rights])) {
+            throw new \InvalidArgumentException("ModuleDrive: invalid ACL right '{$rights}'.");
+        }
+        $role = trim($role);
+        if (preg_match('/^[a-zA-Z][a-zA-Z0-9._-]{0,99}$/', $role) !== 1) {
+            throw new \InvalidArgumentException("ModuleDrive: invalid role name '{$role}'.");
+        }
+
+        $rootId = (int) $this->root->getId();
+        foreach ($this->aces->findByResource('folder', $rootId) as $ace) {
+            if ($ace->getSubjectType() === 'role' && $ace->getSubjectId() === $role) {
+                if (($ladder[$ace->getRights()] ?? 0) >= $ladder[$rights]) {
+                    return $ace;
+                }
+                $ace->setRights($rights);
+                $this->em->persist($ace);
+                $this->em->flush();
+
+                return $ace;
+            }
+        }
+
+        $ace = new AccessControlEntry();
+        $ace->setResourceType('folder');
+        $ace->setResourceId($rootId);
+        $ace->setSubjectType('role');
+        $ace->setSubjectId($role);
+        $ace->setRights($rights);
+        $ace->setCreatedBy(null);
+        $ace->setCreatedAt(gmdate('c'));
+        $this->em->persist($ace);
+        $this->em->flush();
+
+        return $ace;
     }
 
     /**

@@ -291,6 +291,7 @@ final class DocumentService
             $this,
             $this->folders,
             $this->em,
+            $this->aces,
             $this->rootFolder($targetKey, $name),
             !$existed,
         );

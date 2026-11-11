@@ -2,6 +2,7 @@
 
 namespace Z77\Module\Dms\Content;
 
+use Z77\Core\Config\AuthRole;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Module\Dms\Services\Authz;
 use Z77\Module\Dms\Services\DocumentService;
@@ -58,6 +59,12 @@ final class ContentDocuments implements DocumentReferences
             $drive = DocumentService::create()->forModule(self::MODULE_KEY, self::PARTITION_NAME);
             if ($drive->created()) {
                 $drive->ensurePublic();
+                // Who works on content images (owner decision 2026-11-11): editors choose and
+                // upload, an admin also renames and deletes. Role ACEs match by exact name, so
+                // each role is granted on its own. Set up once, like the public mode — a
+                // person's later change in the Drive stays.
+                $drive->grantRole(AuthRole::EDITOR, 'write');
+                $drive->grantRole(AuthRole::ADMIN, 'manage');
             }
             $this->root = (string) $drive->root()->getId();
         }
