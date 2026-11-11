@@ -59,6 +59,9 @@ $renderNodes = function (array $nodes) use (&$renderNodes, $link): void {
         <?php
     }
 };
+// One folder and nothing below it (a module partition such as z77.ch «projects»): there is
+// nothing to navigate — no tree column, the grid takes the width; the head names the folder.
+$singleFolder = count($nodes) === 1 && empty($nodes[0]['children']) && $folder !== null;
 $modeLabel = ['public' => 'öffentlich', 'protected' => 'geschützt', 'sealed' => 'versiegelt'];
 $modeBadge = ['public' => 'badge--success', 'protected' => 'badge--muted', 'sealed' => 'badge--warning'];
 ?>
@@ -66,7 +69,8 @@ $modeBadge = ['public' => 'badge--success', 'protected' => 'badge--muted', 'seal
     <?php if ($window): ?>
     <?= $this->partial('partials/modalActions', ['submit' => '', 'cancel' => 'Schliessen'], 'Z77\\Shared') ?>
     <?php endif; ?>
-    <div class="dms-pick__body">
+    <div class="dms-pick__body<?= $singleFolder ? ' dms-pick__body--single' : '' ?>">
+        <?php if (!$singleFolder): ?>
         <nav class="dms-pick__tree" aria-label="Ordner">
             <?php if ($nodes === []): ?>
             <p class="be-list__empty"><?= e($treeNote ?? 'Kein Ordner, den du sehen darfst.') ?></p>
@@ -74,6 +78,7 @@ $modeBadge = ['public' => 'badge--success', 'protected' => 'badge--muted', 'seal
             <ul class="dms-pick__folders"><?php $renderNodes($nodes); ?></ul>
             <?php endif; ?>
         </nav>
+        <?php endif; ?>
         <section class="dms-pick__main" aria-label="<?= e($folder !== null ? 'Ordner «' . $folder['name'] . '»' : 'Kein Ordner gewählt') ?>">
             <?php if ($folder === null): ?>
             <p class="be-list__empty">Links einen Ordner wählen.</p>

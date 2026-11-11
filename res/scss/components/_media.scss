@@ -76,7 +76,12 @@
     gap:                   1rem;
     min-height:            20rem;
 }
+.dms-pick__body--single { grid-template-columns: minmax(0, 1fr); }
+// The tree stays in view while the grid scrolls (the window body is the scroller).
 .dms-pick__tree {
+    position:      sticky;
+    top:           0;
+    align-self:    start;
     max-height:    65vh;
     padding:       .5rem;
     overflow:      auto;
@@ -203,5 +208,5 @@
 // A phone: the tree above the grid, short.
 @media (max-width: 767px) {
     .dms-pick__body { grid-template-columns: minmax(0, 1fr); }
-    .dms-pick__tree { max-height: 30vh; }
+    .dms-pick__tree { position: static; max-height: 30vh; }
 }
