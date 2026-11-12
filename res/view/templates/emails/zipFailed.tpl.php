@@ -13,7 +13,6 @@
  * @var string $link      absolute
  */
 ?>
-<p data-z77-inline="logo" style="margin:0 0 24px;"></p>
 <p><?= e(t('dms.mail.greeting')) ?></p>
 
 <p>
