@@ -146,7 +146,19 @@ final class MediaField
     public static function thumbUrl(Document $doc, string $base): ?string
     {
         return array_key_exists('s', $doc->getVariants())
-            ? $base . '/document/preview?id=' . (int) $doc->getId() . '&variant=s'
+            ? self::previewUrl($doc, $base, 's')
             : null;
+    }
+
+    /**
+     * The document's bytes INLINE through the domain-gated preview action of the host `$base`
+     * (`DocumentDeliveryTrait`, backend `/backend/documents`) — the original, or one of its
+     * variants. The one place this address is built; a module that shows a document it stored
+     * (a receipt's photo) takes it from here. Whether the session may read it is the action's
+     * gate (`serveFor()`), not this string's.
+     */
+    public static function previewUrl(Document $doc, string $base, ?string $variant = null): string
+    {
+        return $base . '/document/preview?id=' . (int) $doc->getId() . ($variant !== null && $variant !== '' ? '&variant=' . rawurlencode($variant) : '');
     }
 }
