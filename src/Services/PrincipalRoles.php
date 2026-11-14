@@ -7,13 +7,13 @@ use Z77\Core\DI;
 use Z77\Shared\Auth\AuthUser;
 
 /**
- * Extra DMS roles a PROJECT grants to a non-backend identity (F1, z77-rudaz.ch
+ * Extra DMS roles a PROJECT grants to a non-backend identity (F1, a client project
  * 2026-10-30).
  *
  * The DMS sees a member only through its framework roles (`customer`), which every
  * member shares — so a role ACE can only ever open a folder to ALL members. A project
  * that separates members by its own unit (a tenant, a project) answers here which
- * additional role names THIS identity holds, e.g. `rudaz-p12-write`; the folder of
+ * additional role names THIS identity holds, e.g. `project-p12-write`; the folder of
  * that unit carries ACEs for exactly those names. The decision stays in the DMS
  * (Authz / AclService / the /media gate) — the project only names roles.
  *

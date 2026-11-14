@@ -189,6 +189,8 @@ trait DriveControllerTrait
         // DMS-ACTIVE-001: opening the Drive repairs an installation with an old media guard.
         $this->docService()->guardMedia();
 
+        // The Drive's help closes its toolbar (HELP-003).
+        $this->help->attach('Documents/DriveController/list.help', self::DMS_NS, [], 'Hilfe: Dokumentablage', toolbar: true);
         $response = $this->html($this->buildViewModel(
             $this->folderParam(),
             $this->docParam(),

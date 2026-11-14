@@ -1,5 +1,5 @@
 /* documents/chunk-download.js — the browser side of the DMS chunked download
- * (DMS-CHUNK-DL-001, z77-rudaz.ch 2026-10-31). The host caps a response body (cyon: about
+ * (DMS-CHUNK-DL-001, a client project 2026-10-31). The host caps a response body (cyon: about
  * 500 MB → 413), so a file of several GB cannot come down in one answer. This module asks
  * for it in explicit byte ranges (`Range: bytes=a-b`; the Drive passes
  * `dmsConfig['downloadChunkBytes']`, 32 MB) and hands the pieces to the disk without

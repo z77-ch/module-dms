@@ -6,7 +6,7 @@ use Z77\Core\DI;
 
 /**
  * The upload allowlist of THIS installation: {@see DocumentKind::fromMime()} plus the
- * extensions a project adds in `dmsConfig['extraUploadTypes']` (F4, z77-rudaz.ch
+ * extensions a project adds in `dmsConfig['extraUploadTypes']` (F4, a client project
  * 2026-10-31 — point clouds and BIM files that `finfo` cannot name).
  *
  * An extension on the list is matched BY EXTENSION and wins over the sniff: the file

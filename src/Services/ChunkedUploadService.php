@@ -9,7 +9,7 @@ use Z77\Shared\Upload\UploadPolicy;
 use Z77\Shared\ValueObjects\UploadedFile;
 
 /**
- * Chunked upload (F3, z77-rudaz.ch 2026-10-31): a file of several GB enters the DMS in
+ * Chunked upload (F3, a client project 2026-10-31): a file of several GB enters the DMS in
  * pieces, because one request is capped by the host (cyon: 500 MB) and by PHP
  * (`upload_max_filesize` / `post_max_size`). HTTP-agnostic — the endpoints are
  * {@see \Z77\Module\Dms\Ui\ChunkedUploadTrait}, the browser client is

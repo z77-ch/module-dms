@@ -1,5 +1,5 @@
 /* documents/chunk-download-sw.js — service worker of the DMS chunked download
- * (DMS-CHUNK-DL-001, z77-rudaz.ch 2026-10-31). Path (a) of `chunk-download.js`: it turns
+ * (DMS-CHUNK-DL-001, a client project 2026-10-31). Path (a) of `chunk-download.js`: it turns
  * a sequence of Range pieces into ONE download of the browser's own, streamed — a file of
  * several GB never sits in RAM (Firefox has no showSaveFilePicker).
  *

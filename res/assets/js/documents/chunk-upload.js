@@ -1,4 +1,4 @@
-/* documents/chunk-upload.js — the browser side of the DMS chunked upload (F3, z77-rudaz.ch
+/* documents/chunk-upload.js — the browser side of the DMS chunked upload (F3, a client project
  * 2026-10-31). A file of several GB cannot go up in one request: the host caps it (cyon:
  * 500 MB) and so does PHP. This module slices it and sends the pieces one after the other
  * to the endpoints of `ChunkedUploadTrait` (`<base>/chunk-begin|append|status|finish|abort`).

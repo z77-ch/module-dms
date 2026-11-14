@@ -38,16 +38,16 @@ return [
 
     // Extra roles a PROJECT grants to a non-backend identity (a member), so a
     // role ACE can open a folder to SOME members instead of all `customer`s
-    // (F1, z77-rudaz.ch 2026-10-30). FQCN of an invokable
+    // (F1, a client project 2026-10-30). FQCN of an invokable
     //   `__invoke(\Z77\Shared\Auth\AuthUser $user): list<string>`
-    // — e.g. ['rudaz-p12-read'] for a member of project 12; that project's folder
+    // — e.g. ['project-p12-read'] for a member of project 12; that project's folder
     // carries the matching role ACE. Framework role names are dropped, a hook that
     // throws grants nothing ({@see \Z77\Module\Dms\Services\PrincipalRoles}).
     // Null = no extra roles — the DMS behaves exactly as before.
     'principalRolesHook' => null,
 
     // File types THIS installation accepts by extension although `finfo` cannot name
-    // them (F4, z77-rudaz.ch 2026-10-31): point clouds, BIM, … A list of extensions or
+    // them (F4, a client project 2026-10-31): point clouds, BIM, … A list of extensions or
     // ext => MIME, e.g. ['laz', 'las', 'e57', 'ifc' => 'application/x-step', 'xml'].
     // A listed extension wins over the sniff and becomes kind `file`: never inline, no
     // variants, no static public copy, always a download; stored MIME = the listed one or
@@ -55,7 +55,7 @@ return [
     // are ignored ({@see \Z77\Module\Dms\Images\UploadTypes}). Empty = as before.
     'extraUploadTypes' => [],
 
-    // Chunked upload (F3, z77-rudaz.ch 2026-10-31): a file bigger than one request may be
+    // Chunked upload (F3, a client project 2026-10-31): a file bigger than one request may be
     // (host cap — cyon 500 MB — and PHP's upload_max_filesize / post_max_size) goes up in
     // pieces of this size ({@see \Z77\Module\Dms\Services\ChunkedUploadService}). Clamped
     // below the PHP transport cap at runtime, so a too-large value cannot break uploads;
@@ -67,7 +67,7 @@ return [
     // stays bounded by the PHP transport cap regardless.
     'maxUploadBytes' => null,
 
-    // Chunked download (DMS-CHUNK-DL-001, z77-rudaz.ch 2026-10-31): the host refuses an
+    // Chunked download (DMS-CHUNK-DL-001, a client project 2026-10-31): the host refuses an
     // answer above its body cap (cyon 500 MB → 413), so the Drive's «Download» of a
     // document from this size on (bytes) goes through `documents/chunk-download.js` —
     // explicit Range pieces from the same gated endpoint; smaller files keep the plain
