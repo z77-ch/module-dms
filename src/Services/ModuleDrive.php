@@ -2,6 +2,7 @@
 
 namespace Z77\Module\Dms\Services;
 
+use Z77\Module\Dms\Blob\BlobStorage;
 use Z77\Module\Dms\Entities\AccessControlEntry;
 use Z77\Module\Dms\Entities\Document;
 use Z77\Module\Dms\Entities\Folder;
@@ -12,7 +13,7 @@ use Z77\Persistence\Resolver\UnifiedEntityManager;
 use Z77\Shared\Libraries\Convention\Naming;
 
 /**
- * A module's write handle on the DMS (ADR-021 rule 4): scoped to the module's target
+ * A module's handle on the DMS (ADR-021 rule 4): scoped to the module's target
  * partition, resolved ONCE via `dmsConfig['moduleFolders']` (config remaps module key →
  * partition key; no entry = the module's own key) by {@see DocumentService::forModule()}.
  *
@@ -22,6 +23,9 @@ use Z77\Shared\Libraries\Convention\Naming;
  * inside the module's subtree and throws otherwise. Like `saveGenerated`, this is the
  * trusted system path — no session principal (a cron/module context has none); the
  * boundary is structural, not ACL.
+ *
+ * The one READ ({@see read()}) keeps the same boundary: a module gets back the bytes of a
+ * document it stored in its own partition, nothing else.
  */
 final class ModuleDrive
 {
@@ -31,6 +35,7 @@ final class ModuleDrive
         private FolderRepository $folders,
         private UnifiedEntityManager $em,
         private AccessControlEntryRepository $aces,
+        private BlobStorage $blob,
         private Folder $root,
         private bool $created = false,
     ) {}
@@ -226,6 +231,34 @@ final class ModuleDrive
         }
 
         return ['retained' => $retained, 'skipped' => $skipped];
+    }
+
+    /**
+     * The ORIGINAL bytes of a live document in the module's partition — for a module that works
+     * on a file it stored itself, later and outside the request that stored it (module-creditor's
+     * job `creditor-intake` reads the supplier PDF an upload put here; creditor.md
+     * CREDITOR-RECOG-WEB-001).
+     *
+     * Null, never an exception, when the module may not or cannot read it: an unknown id, a
+     * document in the trash, one OUTSIDE the module's partition (another module's, a person's, one
+     * moved away in the Drive, a `moduleFolders` remap since), missing bytes, or bytes that no
+     * longer match the stored checksum. The boundary is the write boundary ({@see isWithin()}); no
+     * session principal and no ACL — a module reads what it stored, never on a person's behalf, and
+     * hands nothing to a browser. Not reported to the activity hook (DMS-ACTIVITY-001, «left out on
+     * purpose»): no person receives the original.
+     */
+    public function read(int $documentId): ?string
+    {
+        $doc = $documentId > 0 ? $this->em->getRepository(Document::class)->find($documentId) : null;
+        if (!$doc instanceof Document || $doc->isDeleted() || !$this->isWithin($doc->getFolderId())) {
+            return null;
+        }
+        $bytes = $this->blob->get((int) $doc->getId(), BlobStorage::ORIGINAL, $doc->getExt());
+        if ($bytes === null || !hash_equals(strtolower($doc->getChecksum()), hash('sha256', $bytes))) {
+            return null;
+        }
+
+        return $bytes;
     }
 
     /**
