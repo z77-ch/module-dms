@@ -134,6 +134,20 @@ class Document
     public function getChecksum(): string { return $this->checksum; }
     public function getSource(): string { return $this->source; }
     public function getRetentionUntil(): ?string { return $this->retentionUntil; }
+
+    /**
+     * Whether the legal retention still runs. A DATE deadline («2036-12-31») covers that whole day —
+     * the record may go on the day after (RECEIPT-RETAIN-002, owner 2026-11-15); a timestamp is compared as is.
+     */
+    public function isRetained(?int $now = null): bool
+    {
+        if ($this->retentionUntil === null) {
+            return false;
+        }
+        $until = strlen($this->retentionUntil) === 10 ? strtotime($this->retentionUntil . ' +1 day') : strtotime($this->retentionUntil);
+
+        return $until !== false && $until > ($now ?? time());
+    }
     public function getDeletedAt(): ?string { return $this->deletedAt; }
     public function isDeleted(): bool { return $this->deletedAt !== null; }
     public function getProfile(): ?string { return $this->profile; }

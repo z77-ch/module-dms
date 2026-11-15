@@ -298,7 +298,7 @@ final class UploadService
             throw new \RuntimeException(t('dms.upload.sealed'));
         }
         $until = $existing->getRetentionUntil();
-        if ($until !== null && strtotime($until) > time()) {
+        if ($existing->isRetained()) {
             throw new \RuntimeException(t('dms.upload.retention', ['until' => $until]));
         }
 

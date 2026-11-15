@@ -29,8 +29,11 @@ commit here — issues and pull requests go to the monorepo.
 - **Downloads:** range-capable `FileResponse`; large files come down in explicit pieces
   (`documents/chunk-download.js` + service worker); a ZIP of many documents can be prepared by a
   background job and served piecewise (`ZipBundleService`, for project pages).
-- **Soft delete + trash** with restore, purge, retention, and an activity hook
-  (`Services\ActivityLog`) for every change.
+- **Soft delete + trash** with restore, purge and an activity hook (`Services\ActivityLog`) for
+  every change. A legal **retention deadline** (`retentionUntil`, a date that covers its whole
+  last day — `Document::isRetained()`) blocks the purge and an overwrite; a module sets it on its
+  own documents through `ModuleDrive::retainUntil()` (only extends — e.g. `module-receipt`: a
+  posted receipt's photo, 10 years after the end of its fiscal year).
 - **Template helpers:** `mediaUrl()` / `mediaImage()` for public images by slug path.
 
 ## Screens and routes

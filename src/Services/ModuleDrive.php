@@ -178,28 +178,89 @@ final class ModuleDrive
     }
 
     /**
+     * Set the legal retention deadline (`retentionUntil`, ISO date) of documents the module
+     * stored — e.g. a receipt photo once its receipt is posted to the ledger (Swiss OR 958f:
+     * 10 years). A running deadline blocks the purge and an overwrite ({@see DocumentService::purge()},
+     * `UploadService`); a soft-delete stays possible (restorable, bytes kept).
+     *
+     * Server-side only: `retentionUntil` is a server-controlled field (no `#[Clean]`) and this is the
+     * one write path a module has for it. It only EXTENDS — a document whose deadline is already the
+     * same or later is left alone, so the call is idempotent and safe to repeat (a backfill). A
+     * soft-deleted document is covered too (it may still be restored, its purge must wait). One flush
+     * for the whole batch. Unknown documents and documents outside the module's partition (moved away
+     * in the Drive, or a `moduleFolders` remap since) are NOT written and come back in `skipped` — a
+     * module never sets a deadline on a document outside its subtree (ADR-021 rule 4).
+     *
+     * @param array<int, string> $untilById document id => deadline `YYYY-MM-DD`
+     * @return array{retained: int, skipped: list<int>} written documents; ids not written (unknown or outside)
+     * @throws \InvalidArgumentException a deadline that is not a valid `YYYY-MM-DD` date
+     */
+    public function retainUntil(array $untilById): array
+    {
+        foreach ($untilById as $id => $until) {
+            $parts = explode('-', (string) $until);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $until) !== 1 || !checkdate((int) $parts[1], (int) $parts[2], (int) $parts[0])) {
+                throw new \InvalidArgumentException("ModuleDrive: retention deadline '{$until}' of document {$id} is not a YYYY-MM-DD date.");
+            }
+        }
+
+        $documents = $this->em->getRepository(Document::class);
+        $retained  = 0;
+        $skipped   = [];
+        foreach ($untilById as $id => $until) {
+            $doc = $documents->find((int) $id);
+            if (!$doc instanceof Document || !$this->isWithin($doc->getFolderId())) {
+                $skipped[] = (int) $id;
+                continue;
+            }
+            $current = $doc->getRetentionUntil();
+            if ($current !== null && substr($current, 0, 10) >= $until) {
+                continue;   // already kept as long or longer — never shortened
+            }
+            $doc->setRetentionUntil($until);
+            $this->em->persist($doc);
+            $retained++;
+        }
+        if ($retained > 0) {
+            $this->em->flush();
+        }
+
+        return ['retained' => $retained, 'skipped' => $skipped];
+    }
+
+    /**
      * The write boundary (ADR-021 rule 4): the folder must lie inside the module's
      * subtree — the module's partition or below, NEVER above or in a foreign partition.
      */
     private function assertWithin(?int $folderId): void
     {
-        $cur   = $folderId;
-        $guard = 50;
-        while ($cur !== null && $guard-- > 0) {
-            if ($cur === $this->root->getId()) {
-                return;
-            }
-            $folder = $this->folders->find($cur);
-            if (!$folder instanceof Folder) {
-                break;
-            }
-            $cur = $folder->getParentId();
+        if ($this->isWithin($folderId)) {
+            return;
         }
 
         throw new \RuntimeException(
             "ModuleDrive: folder {$folderId} is outside the module's partition '{$this->root->getKey()}' — "
             . 'a module must never write above or outside its configured target (ADR-021).'
         );
+    }
+
+    /** Whether the folder is the module's partition or lies below it. */
+    private function isWithin(?int $folderId): bool
+    {
+        $cur   = $folderId;
+        $guard = 50;
+        while ($cur !== null && $guard-- > 0) {
+            if ($cur === $this->root->getId()) {
+                return true;
+            }
+            $folder = $this->folders->find($cur);
+            if (!$folder instanceof Folder) {
+                return false;
+            }
+            $cur = $folder->getParentId();
+        }
+
+        return false;
     }
 
     private function childByName(Folder $parent, string $name): ?Folder

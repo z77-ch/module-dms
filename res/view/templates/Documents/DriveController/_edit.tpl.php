@@ -152,9 +152,11 @@ $formId    = 'dms-edit-' . $type . '-' . (int) $id;
 
         <hr class="be-form__divider">
         <p class="be-form__section">Zugriffsrechte</p>
-        <?php if ($effectiveMode !== 'protected'): ?>
+        <?php /* The rules gate the Drive in EVERY mode (AclService ignores deliveryMode); «public» only opens
+           the delivery under /media — said so (owner 2026-11-15, DMS-ACL-HINT-001). */ ?>
+        <?php if ($effectiveMode === 'public'): ?>
         <div class="be-modal__alert">
-            Regeln greifen nur im Modus «protected» (aktuell: <strong><?= e($effectiveMode) ?></strong>).
+            Über /media/… kann jeder die Dateien abrufen — in der Ablage gelten trotzdem diese Regeln.
             Super-User/Besitzer haben immer Zugriff.
         </div>
         <?php endif; ?>

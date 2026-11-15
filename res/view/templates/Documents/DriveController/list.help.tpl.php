@@ -24,7 +24,7 @@
 </ul>
 
 <h3>Menü einer Zeile (⋮)</h3>
-<p>Jeder Ordner und jede Datei hat ein <strong>⋮</strong>: der Schalter <strong>Aktiv</strong> (ausgeliefert / sichtbar), die geltende Auslieferung, <strong>Bearbeiten</strong>, <strong>Verschieben</strong>, <strong>Löschen</strong>. Bei einem Ordner zusätzlich <strong>Neuer Unterordner</strong> und <strong>Datei hochladen</strong>, bei einer Datei <strong>Öffnen</strong>, <strong>Download</strong> und — nur wenn sie öffentlich ist — <strong>Pfad kopieren</strong> (die Web-Adresse unter <code>/media/…</code>, z.B. für einen Link auf der Website).</p>
+<p>Jeder Ordner und jede Datei hat ein <strong>⋮</strong>: der Schalter <strong>Aktiv</strong> (ausgeliefert / sichtbar), die geltende Auslieferung, <strong>Bearbeiten</strong>, <strong>Verschieben</strong>, <strong>Löschen</strong>. Bei einem Ordner zusätzlich <strong>Neuer Unterordner</strong> (beim Drive selbst: <strong>Neuer Bereich</strong>, nur Super-User) und <strong>Datei hochladen</strong>, bei einer Datei <strong>Öffnen</strong>, <strong>Download</strong> und — nur wenn sie öffentlich ist — <strong>Pfad kopieren</strong> (die Web-Adresse unter <code>/media/…</code>, z.B. für einen Link auf der Website).</p>
 <p>Die Reihenfolge der Dateien in einem Ordner ist von Hand: eine Zeile an die gewünschte Stelle ziehen. Diese Reihenfolge gilt auch auf der Website (z.B. für einen Slider oder eine Galerie).</p>
 
 <h3>Dateien hochladen</h3>
@@ -40,7 +40,7 @@
 <p>Das Kästchen an einer Zeile wählt die Datei aus; darauf erscheint eine Leiste mit Anzahl, <strong>Alle</strong>, <strong>Keine</strong>, <strong>Verschieben</strong> und <strong>Löschen</strong> (höchstens 500 Dateien, nur Dateien, keine Ordner). Dateien, für die dir das Recht fehlt, werden übersprungen und in der Meldung genannt.</p>
 
 <h3>Löschen und Papierkorb</h3>
-<p><strong>Löschen</strong> legt eine Datei in den <strong>Papierkorb</strong> — sie wird ab sofort nicht mehr ausgeliefert, ist aber noch da. Im Papierkorb: <strong>Wiederherstellen</strong> legt sie in ihren Ordner zurück, <strong>Endgültig löschen</strong> entfernt Datei und Eintrag unwiderruflich, <strong>Papierkorb leeren …</strong> löscht nach einer Bestätigung alles endgültig, was du löschen darfst. Eine Datei mit laufender <strong>Aufbewahrungsfrist</strong> bleibt im Papierkorb, bis die Frist abgelaufen ist.</p>
+<p><strong>Löschen</strong> legt eine Datei in den <strong>Papierkorb</strong> — sie wird ab sofort nicht mehr ausgeliefert, ist aber noch da. Im Papierkorb: <strong>Wiederherstellen</strong> legt sie in ihren Ordner zurück, <strong>Endgültig löschen</strong> entfernt Datei und Eintrag unwiderruflich, <strong>Papierkorb leeren …</strong> löscht nach einer Bestätigung alles endgültig, was du löschen darfst. Eine Datei mit laufender <strong>Aufbewahrungsfrist</strong> bleibt im Papierkorb, bis die Frist abgelaufen ist (die Frist gilt bis und mit ihrem letzten Tag; die Meldung nennt das Datum). So eine Frist setzt ein Modul, zum Beispiel für das Foto eines verbuchten Belegs: 10 Jahre ab Ende des Geschäftsjahrs. Löschen in den Papierkorb und Wiederherstellen gehen auch während der Frist.</p>
 
 <h3>Öffentlich, geschützt, versiegelt</h3>
 <ul>

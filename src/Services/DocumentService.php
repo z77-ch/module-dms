@@ -1032,7 +1032,7 @@ final class DocumentService
             throw new NotFoundException('Deleted document not found.');
         }
         $until = $doc->getRetentionUntil();
-        if ($until !== null && strtotime($until) > time()) {
+        if ($doc->isRetained()) {
             throw new \RuntimeException("Aufbewahrungsfrist läuft noch (bis {$until}) — endgültiges Löschen gesperrt.");
         }
 

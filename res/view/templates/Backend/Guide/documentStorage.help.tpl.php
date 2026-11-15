@@ -24,7 +24,7 @@
 <p>Jeder sieht in der Ablage nur die Ordner, für die er ein Recht hat (Lesen, Schreiben, Verwalten); Rechte vergibt man im Dialog <strong>Bearbeiten</strong> eines Ordners, für eine Rolle oder einen einzelnen Benutzer. Auch ein Admin braucht ein Recht; nur der Super-User sieht und darf alles. Bereiche anlegen und Rechte auf Bereichen vergeben darf nur der Super-User.</p>
 
 <h4>Löschen, Papierkorb, Aufbewahrung</h4>
-<p>Gelöschte Dateien liegen im <strong>Papierkorb</strong> der Ablage und lassen sich dort wiederherstellen. Erst «Endgültig löschen» entfernt sie. Eine Datei mit Aufbewahrungsfrist lässt sich vorher nicht endgültig löschen.</p>
+<p>Gelöschte Dateien liegen im <strong>Papierkorb</strong> der Ablage und lassen sich dort wiederherstellen. Erst «Endgültig löschen» entfernt sie. Eine Datei mit <strong>Aufbewahrungsfrist</strong> lässt sich bis und mit dem letzten Tag der Frist weder endgültig löschen noch durch einen neuen Upload überschreiben. Die Frist setzt ein Modul — zum Beispiel bekommt das Foto eines Belegs beim Verbuchen 10 Jahre ab Ende des Geschäftsjahrs (gesetzliche Aufbewahrung von Buchungsbelegen).</p>
 
 <h4>Grosse Dateien</h4>
 <p>Grosse Dateien (auch mehrere GB) werden beim Hochladen und beim Herunterladen automatisch in Stücken übertragen. Videos spielt «Öffnen» im Browser ab, soweit der Browser das Format kennt.</p>

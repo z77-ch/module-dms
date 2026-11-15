@@ -57,5 +57,5 @@
     <li><strong>Schreiben</strong> — dazu hochladen, Unterordner anlegen, Dateien hineinverschieben und die Reihenfolge ändern.</li>
     <li><strong>Verwalten</strong> — dazu umbenennen, verschieben, löschen, aktiv schalten, Modus ändern und Rechte vergeben.</li>
 </ul>
-<p>Es gilt das höchste Recht aus allen passenden Regeln auf dem Ordner und den Ordnern darüber. Wer eine Datei hochgeladen hat, darf sie immer verwalten; der Super-User darf alles. Ein Admin hat ohne Regel <strong>kein</strong> Recht in der Ablage. Rechte auf dem Drive selbst und auf einem Bereich vergibt nur der Super-User. In einem öffentlichen Ordner darf jeder lesen; die Regeln bestimmen dort nur, wer schreiben und verwalten darf.</p>
+<p>Es gilt das höchste Recht aus allen passenden Regeln auf dem Ordner und den Ordnern darüber. Wer eine Datei hochgeladen hat, darf sie immer verwalten; der Super-User darf alles. Ein Admin hat ohne Regel <strong>kein</strong> Recht in der Ablage. Rechte auf dem Drive selbst und auf einem Bereich vergibt nur der Super-User. Das gilt in jedem Modus: <strong>Öffentlich</strong> heisst nur, dass jeder die Dateien über ihre Web-Adresse <code>/media/…</code> abrufen kann — in der Ablage sieht und ändert sie trotzdem nur, wer hier ein Recht hat.</p>
 </section>
