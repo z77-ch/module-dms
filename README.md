@@ -1,5 +1,12 @@
 # z77/module-dms
 
+> **Install with an AI assistant.** [INSTALL-AI.md](https://github.com/z77-ch/z77-framework/blob/main/INSTALL-AI.md) is an installation guide written for an AI coding assistant (e.g. Claude Code) — no developer knowledge needed ([download](https://raw.githubusercontent.com/z77-ch/z77-framework/main/INSTALL-AI.md)). Paste one of these prompts into your assistant:
+>
+> ```text
+> Read https://raw.githubusercontent.com/z77-ch/z77-framework/main/INSTALL-AI.md and install z77 for me. Ask me before you decide anything.
+> Lies https://raw.githubusercontent.com/z77-ch/z77-framework/main/INSTALL-AI.md und installiere z77 für mich. Frag mich, bevor du etwas entscheidest.
+> ```
+
 The document management module of z77: one storage for every file of an installation —
 uploads, website images, generated documents — organised in a folder tree, gated by
 ownership + ACL, and delivered through PHP (range-capable) or, for public content, as a lazily
@@ -33,7 +40,7 @@ commit here — issues and pull requests go to the monorepo.
   every change. A legal **retention deadline** (`retentionUntil`, a date that covers its whole
   last day — `Document::isRetained()`) blocks the purge and an overwrite; a module sets it on its
   own documents through `ModuleDrive::retainUntil()` (only extends — e.g. `module-receipt`: a
-  posted receipt's photo, 10 years after the end of its fiscal year).
+  posted receipt's photo, 10 years after the end of its fiscal year; `module-creditor` does the same for its supplier invoices).
 - **Template helpers:** `mediaUrl()` / `mediaImage()` for public images by slug path.
 
 ## Screens and routes
@@ -84,4 +91,4 @@ for image sizes per partition) — never edit the package.
 
 ## License
 
-MIT — see the monorepo.
+MIT — see [`LICENSE`](LICENSE). Author: Peter Ruepp, [z77.ch](https://z77.ch).
