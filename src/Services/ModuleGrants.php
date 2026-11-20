@@ -7,10 +7,10 @@ use Z77\Persistence\File\Storage\FileStorage;
 
 /**
  * The grants a module DECLARES on its DMS partition, applied ONCE per installation
- * (documents.md DMS-MODULE-ACL-001, owner 2026-11-20: role `admin` reads «Belege» and
- * «Kreditorenrechnungen»). A module names them in its config:
+ * (documents.md DMS-MODULE-ACL-001, owner 2026-11-20). A module names them in its config — the
+ * DMS names no consumer:
  *
- *     'dmsPartitionGrants' => [ReceiptCaptureService::MODULE_KEY => [AuthRole::ADMIN => 'read']],
+ *     'dmsPartitionGrants' => [self::MODULE_KEY => [AuthRole::ADMIN => 'read']],
  *
  * — DMS module key (the key it passes to {@see DocumentService::forModule()}, remapped by
  * `dmsConfig['moduleFolders']` like every write) → role → `read|write|manage`. A module DECLARES,

@@ -28,7 +28,7 @@
     $download  = $chunk !== null ? $chunk['url'] : str_replace('/document/preview?', '/document/download?', $player['src']);
     ?>
     <p>Dieses Format kann der Browser nicht abspielen. Bitte herunterladen und mit einem Programm wie VLC öffnen — oder vor dem Hochladen in MP4 umwandeln.</p>
-    <p><a class="dms-btn dms-btn--ghost" href="<?= e($download) ?>"<?= $chunkAttr ?>><svg class="dms-icon"><use href="#i-download"/></svg> Download</a></p>
+    <p><a class="dms-btn dms-btn--ghost" href="<?= e($download) ?>" data-no-pending<?= $chunkAttr ?>><svg class="dms-icon"><use href="#i-download"/></svg> Download</a></p>
 <?php elseif ($player['kind'] === 'audio'): ?>
     <audio controls preload="metadata" src="<?= e($player['src']) ?>" style="width:100%"></audio>
 <?php else: ?>

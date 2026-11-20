@@ -48,7 +48,7 @@ $chunkAttr = $chunk !== null
           <?php else: ?>
           <a class="dms-btn dms-btn--ghost" href="<?= e($preview['previewUrl']) ?>" target="_blank" rel="noopener"<?= !empty($preview['chunk']['open']) ? $chunkAttr : '' ?>><svg class="dms-icon"><use href="#i-eye"/></svg> Öffnen</a>
           <?php endif; ?>
-          <a class="dms-btn dms-btn--ghost" href="<?= e($preview['downloadUrl']) ?>"<?= $chunkAttr ?>><svg class="dms-icon"><use href="#i-download"/></svg> Download</a>
+          <a class="dms-btn dms-btn--ghost" href="<?= e($preview['downloadUrl']) ?>" data-no-pending<?= $chunkAttr ?>><svg class="dms-icon"><use href="#i-download"/></svg> Download</a>
           <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= $base ?>/drive/edit?id=<?= (int)$preview['id'] ?>"><svg class="dms-icon"><use href="#i-edit"/></svg> Bearbeiten</button>
           <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= $base ?>/drive/move?id=<?= (int)$preview['id'] ?>"><svg class="dms-icon"><use href="#i-move"/></svg> Verschieben</button>
           <button type="button" class="dms-btn dms-btn--ghost" data-modal="<?= $base ?>/drive/confirm-delete?id=<?= (int)$preview['id'] ?>"><svg class="dms-icon"><use href="#i-trash"/></svg> Löschen</button>
