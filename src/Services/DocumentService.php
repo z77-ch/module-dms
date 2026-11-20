@@ -62,7 +62,7 @@ final class DocumentService
     {
         $uem = DI::getUnifiedEntityManager();
 
-        return new self(
+        $service = new self(
             $uem->getRepository(Document::class),
             $uem->getRepository(Folder::class),
             $uem,
@@ -72,6 +72,12 @@ final class DocumentService
             Authz::create(),
             DI::getCacheManager()->data(),
         );
+        // The grants modules declare on their partitions (`dmsPartitionGrants`), applied once
+        // per installation — on the first DMS use after a deploy, so an existing installation
+        // gets a new declaration without a setup step. Once per process; never throws.
+        ModuleGrants::ensure($service);
+
+        return $service;
     }
 
     // ── read ────────────────────────────────────────────────────────────────
@@ -281,13 +287,12 @@ final class DocumentService
      */
     public function forModule(string $moduleKey, ?string $name = null): ModuleDrive
     {
-        $map       = DI::getModuleManager()->getModuleConfig('dms')?->get('moduleFolders', []) ?? [];
-        $targetKey = (is_array($map) ? ($map[$moduleKey] ?? null) : null) ?? $moduleKey;
+        $targetKey = $this->moduleTargetKey($moduleKey);
         // Whether THIS call creates the partition — a module may set up what is new
         // (ModuleDrive::created()), never re-decide what a person has set since.
         $existed   = $this->folders->findRootByKey($targetKey) instanceof Folder;
 
-        return new ModuleDrive(
+        $drive = new ModuleDrive(
             $this,
             $this->folders,
             $this->em,
@@ -296,6 +301,36 @@ final class DocumentService
             $this->rootFolder($targetKey, $name),
             !$existed,
         );
+        if (!$existed) {
+            // A partition created just now gets the module's declared grants at once.
+            ModuleGrants::ensureCreated($moduleKey, $drive);
+        }
+
+        return $drive;
+    }
+
+    /**
+     * The module's handle on its partition ONLY when the partition exists — find-only, never
+     * creates (unlike {@see forModule()}). The same `moduleFolders` resolution. Null = there is
+     * no partition yet (the module has stored nothing).
+     */
+    public function findModule(string $moduleKey): ?ModuleDrive
+    {
+        $targetKey = $this->moduleTargetKey($moduleKey);
+        $root      = $this->folders->findRootByKey($targetKey);
+        if (!$root instanceof Folder) {
+            return null;
+        }
+
+        return new ModuleDrive($this, $this->folders, $this->em, $this->aces, $this->blob, $root, false);
+    }
+
+    /** The partition key a module writes into: its own key unless `dmsConfig['moduleFolders']` remaps it. */
+    public function moduleTargetKey(string $moduleKey): string
+    {
+        $map = DI::getModuleManager()->getModuleConfig('dms')?->get('moduleFolders', []) ?? [];
+
+        return (is_array($map) ? ($map[$moduleKey] ?? null) : null) ?? $moduleKey;
     }
 
     /**
