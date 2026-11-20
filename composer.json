@@ -23,13 +23,13 @@
     "prefer-stable": true,
     "extra": {
         "branch-alias": {
-            "dev-main": "1.0.x-dev"
+            "dev-main": "2.0.x-dev"
         }
     },
     "require": {
         "php": ">=8.2",
         "ext-gd": "*",
-        "z77/kernel": "^1.0"
+        "z77/kernel": "^2.0"
     },
     "support": {
         "issues": "https://github.com/z77-ch/z77-framework/issues",

@@ -57,7 +57,7 @@ Background jobs (`dmsConfig['jobs']`): `dms-zip-prepare`, `dms-zip-cleanup` (sch
 
 ## Requirements
 
-- PHP ≥ 8.2 with `ext-gd`; `z77/kernel` ^1.0.
+- PHP ≥ 8.2 with `ext-gd`; `z77/kernel` ^2.0.
 - The PHP upload limits (`upload_max_filesize`, `post_max_size`) are the upload ceiling — there
   is no second app setting. Larger files go up in chunks.
 
