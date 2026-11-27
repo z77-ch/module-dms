@@ -17,7 +17,7 @@ if ($doc === null): ?>
     <div class="be-modal__header"><h2 class="be-modal__title">Dokument löschen</h2></div>
     <div class="be-modal__body">
         <p>«<?= e($doc->getDisplayName()) ?>» in den Papierkorb legen?</p>
-        <p style="font-size:.8rem;color:var(--be-muted,#94a3b8)">Das Dokument wandert in den Papierkorb (wiederherstellbar); die Datei bleibt erhalten. Endgültiges Löschen erfolgt dort.</p>
+        <p style="color:var(--be-muted,#94a3b8)">Das Dokument wandert in den Papierkorb (wiederherstellbar); die Datei bleibt erhalten. Endgültiges Löschen erfolgt dort.</p>
     </div>
     <?= $this->partial('partials/modalActions', ['submit' => 'Löschen', 'kind' => 'danger', 'end' => true], 'Z77\\Shared') ?>
 </form>

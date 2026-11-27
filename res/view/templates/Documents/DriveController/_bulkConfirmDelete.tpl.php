@@ -19,12 +19,12 @@
     <div class="be-modal__header"><h2 class="be-modal__title"><?= e($countLabel) ?> löschen</h2></div>
     <div class="be-modal__body">
         <p><?= e($countLabel) ?> in den Papierkorb legen?</p>
-        <ul style="max-height:10rem;overflow-y:auto;margin:0 0 .8rem;padding:0 0 0 1.1rem;font-size:.85rem">
+        <ul style="max-height:10rem;overflow-y:auto;margin:0 0 .8rem;padding:0 0 0 1.1rem">
             <?php foreach ($names as $name): ?>
             <li style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($name) ?></li>
             <?php endforeach; ?>
         </ul>
-        <p style="font-size:.8rem;color:var(--be-muted,#94a3b8)">Die Dokumente wandern in den Papierkorb (wiederherstellbar); die Dateien bleiben erhalten. Endgültiges Löschen erfolgt dort.</p>
+        <p style="color:var(--be-muted,#94a3b8)">Die Dokumente wandern in den Papierkorb (wiederherstellbar); die Dateien bleiben erhalten. Endgültiges Löschen erfolgt dort.</p>
     </div>
     <?= $this->partial('partials/modalActions', ['submit' => 'Löschen', 'kind' => 'danger', 'end' => true], 'Z77\\Shared') ?>
 </form>

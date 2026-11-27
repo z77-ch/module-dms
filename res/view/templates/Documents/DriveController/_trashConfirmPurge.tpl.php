@@ -17,7 +17,7 @@ $back = '<button type="button" class="be-btn be-btn--ghost" data-fetch-get="' . 
     <div class="be-modal__header"><h2 class="be-modal__title">Papierkorb leeren</h2></div>
     <div class="be-modal__body">
         <p><?= $count === 1 ? '1 Dokument' : (int) $count . ' Dokumente' ?> endgültig löschen?</p>
-        <p style="font-size:.8rem;color:var(--be-muted,#94a3b8)">Datei und Eintrag werden unwiderruflich entfernt. Dokumente mit laufender Aufbewahrungsfrist bleiben im Papierkorb.</p>
+        <p style="color:var(--be-muted,#94a3b8)">Datei und Eintrag werden unwiderruflich entfernt. Dokumente mit laufender Aufbewahrungsfrist bleiben im Papierkorb.</p>
     </div>
     <?= $this->partial('partials/modalActions', ['submit' => 'Endgültig löschen', 'kind' => 'danger', 'cancel' => '', 'extra' => $back, 'end' => true], 'Z77\\Shared') ?>
 </form>

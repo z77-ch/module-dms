@@ -17,7 +17,7 @@
     <div class="be-modal__header"><h2 class="be-modal__title"><?= e($countLabel) ?> verschieben</h2></div>
     <?= $this->partial('partials/modalActions', ['submit' => 'Verschieben'], 'Z77\\Shared') ?>
     <div class="be-modal__body">
-        <ul style="max-height:10rem;overflow-y:auto;margin:0 0 .8rem;padding:0 0 0 1.1rem;font-size:.85rem">
+        <ul style="max-height:10rem;overflow-y:auto;margin:0 0 .8rem;padding:0 0 0 1.1rem">
             <?php foreach ($names as $name): ?>
             <li style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= e($name) ?></li>
             <?php endforeach; ?>

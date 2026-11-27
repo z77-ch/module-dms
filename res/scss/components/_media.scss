@@ -6,6 +6,7 @@
 // backend page, where the Drive's bundle is not loaded. The host compiles this partial INTO its
 // own bundle (backend: `base.scss`) and binds the colours (`_dms-host.scss`) — the split of
 // `_windows.scss` / `_upload.scss`. The defaults below let it render on its own.
+// Text is `1rem` — the host's root (the backend's flat 16px baseline × font slider, 2026-11-26).
 
 .dms-media-field,
 .dms-pick {
@@ -57,7 +58,7 @@
     overflow:      hidden;
     text-overflow: ellipsis;
     white-space:   nowrap;
-    font-size:     .85rem;
+    font-size:     1rem;
 }
 .dms-media-field__thumb:is(.is-empty, .is-missing) .dms-media-field__name { color: var(--dms-media-muted); }
 .dms-media-field__thumb.is-missing .dms-media-field__name                  { color: var(--dms-media-warn); }
@@ -103,7 +104,7 @@
     overflow:        hidden;
     border-radius:   calc(var(--dms-media-radius) - 2px);
     color:           inherit;
-    font-size:       .85rem;
+    font-size:       1rem;
     text-decoration: none;
     text-overflow:   ellipsis;
     white-space:     nowrap;
@@ -191,7 +192,7 @@
 }
 .dms-pick__ext {
     color:       var(--dms-media-muted);
-    font-size:   .75rem;
+    font-size:   1rem;
     font-weight: 600;
 }
 .dms-pick__name,
@@ -201,9 +202,9 @@
     text-overflow: ellipsis;
     white-space:   nowrap;
 }
-.dms-pick__name   { font-size: .8rem; }
-.dms-pick__meta   { color: var(--dms-media-muted); font-size: .7rem; }
-.dms-pick__reason { color: var(--dms-media-warn);  font-size: .7rem; white-space: normal; }
+.dms-pick__name   { font-size: 1rem; }
+.dms-pick__meta   { color: var(--dms-media-muted); font-size: 1rem; }
+.dms-pick__reason { color: var(--dms-media-warn);  font-size: 1rem; white-space: normal; }
 
 // A phone: the tree above the grid, short.
 @media (max-width: 767px) {

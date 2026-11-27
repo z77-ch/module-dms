@@ -70,7 +70,7 @@ $renderNodes = function (array $nodes, int $depth) use (&$renderNodes, $listUrl,
 <nav class="dms-drive__tree z77-split__pane z77-split__pane--nav">
   <ul class="dms-tree">
     <?php if ($roots === []): ?>
-    <li class="dms-tree__empty" style="padding:.5rem .75rem;font-size:.85rem;color:var(--dms-muted,#94a3b8)">Noch keine Ordner — oben «Neuer Ordner».</li>
+    <li class="dms-tree__empty" style="padding:.5rem .75rem;color:var(--dms-muted,#94a3b8)">Noch keine Ordner — oben «Neuer Ordner».</li>
     <?php else: ?>
     <?php $renderNodes($roots, 0); ?>
     <?php endif; ?>
